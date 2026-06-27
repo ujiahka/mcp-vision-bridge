@@ -64,6 +64,7 @@ The init command asks for:
 - whether image URL fetching is allowed
 - local data directory
 - whether local recognition logs should be enabled
+- whether to register `vision-bridge` into Claude Code user MCP automatically
 
 By default, images are preprocessed locally only when the configured provider is a local/LAN endpoint:
 
@@ -108,6 +109,30 @@ VISION_PROVIDER_CATALOG=C:/path/provider-catalog.json
 ```
 
 ## MCP Client Configuration
+
+For Claude Code, the init command can register the MCP server automatically. After global install:
+
+```bash
+mcp-vision-bridge-init
+```
+
+Accept the Claude Code registration prompt, then restart Claude Code or run `/mcp`. You should see:
+
+```text
+vision-bridge  Connected
+```
+
+Manual Claude Code registration:
+
+```bash
+claude mcp add --scope user vision-bridge -- mcp-vision-bridge
+```
+
+On Windows, if command resolution is unreliable, use the npm shim path:
+
+```powershell
+claude mcp add --scope user vision-bridge -- "$env:APPDATA\npm\mcp-vision-bridge.cmd"
+```
 
 Use the server over stdio:
 

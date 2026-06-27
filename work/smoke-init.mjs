@@ -3,13 +3,17 @@ import fs from "node:fs";
 import path from "node:path";
 
 const root = process.cwd();
-const noCatalogEnv = { VISION_PROVIDER_CATALOG: path.join(root, "work", "missing-provider-catalog.json") };
+const baseSmokeEnv = { VISION_MCP_SKIP_CLIENT_REGISTER: "true" };
+const noCatalogEnv = {
+  ...baseSmokeEnv,
+  VISION_PROVIDER_CATALOG: path.join(root, "work", "missing-provider-catalog.json"),
+};
 
 async function runInit(name, configPath, answers, extraEnv = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [path.join(root, "src", "init-config.js")], {
       cwd: root,
-      env: { ...process.env, ...extraEnv, VISION_MCP_CONFIG: configPath },
+      env: { ...process.env, ...baseSmokeEnv, ...extraEnv, VISION_MCP_CONFIG: configPath },
       stdio: ["pipe", "pipe", "pipe"],
     });
 

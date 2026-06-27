@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import readline from "node:readline";
@@ -109,6 +110,12 @@ const TEXT = {
     saved: "配置已保存",
     dataDirOut: "本地数据目录",
     privacy: "未启用遥测。图片只会在调用工具时发送到你配置的视觉模型 endpoint。",
+    registerClaude: "是否自动注册到 Claude Code 用户级 MCP（之后 /mcp 可直接看到 vision-bridge）？",
+    claudeAlreadyRegistered: "Claude Code 已注册 vision-bridge。",
+    claudeRegistered: "Claude Code 已注册 vision-bridge。",
+    claudeUnavailable: "未检测到 claude 命令，已跳过 Claude Code 自动注册。",
+    claudeRegisterFailed: "Claude Code 自动注册失败",
+    claudeManual: "可手动执行",
     cancelled: "安装已取消。",
     remoteDenied: "未允许远程 provider。请返回上一步改用本地/LAN endpoint，或明确允许远程使用。",
     invalidChoice: "无效选项，请重新输入。",
@@ -159,6 +166,12 @@ const TEXT = {
     saved: "Config saved",
     dataDirOut: "Local data dir",
     privacy: "No telemetry is enabled. Images are sent only to the configured model endpoint during tool calls.",
+    registerClaude: "Register to Claude Code user MCP automatically so /mcp can show vision-bridge?",
+    claudeAlreadyRegistered: "Claude Code already has vision-bridge registered.",
+    claudeRegistered: "Claude Code registered vision-bridge.",
+    claudeUnavailable: "Claude Code command was not found; skipped automatic Claude Code registration.",
+    claudeRegisterFailed: "Claude Code automatic registration failed",
+    claudeManual: "You can run manually",
     cancelled: "Setup cancelled.",
     remoteDenied: "Remote provider was not allowed. Go back and choose a local/LAN endpoint, or explicitly allow remote use.",
     invalidChoice: "Invalid choice, please try again.",
@@ -180,6 +193,7 @@ try {
   console.log(`${t.saved}: ${configPath}`);
   console.log(`${t.dataDirOut}: ${config.dataDir}`);
   console.log(t.privacy);
+  await promptClientRegistration(t);
 } finally {
   rl.close();
 }
@@ -592,4 +606,76 @@ function uniqueProfileId(base, existingIds) {
     suffix += 1;
   }
   return candidate;
+}
+
+async function promptClientRegistration(t) {
+  if (isTruthyEnv(process.env.VISION_MCP_SKIP_CLIENT_REGISTER)) return;
+  if (!(await confirm(t.registerClaude, true, t))) return;
+
+  const serverCommand = findCommand("mcp-vision-bridge") || "mcp-vision-bridge";
+  const result = registerClaudeCode(serverCommand);
+  if (result.ok) {
+    console.log(result.already ? t.claudeAlreadyRegistered : t.claudeRegistered);
+    return;
+  }
+
+  if (result.missingClaude) {
+    console.log(t.claudeUnavailable);
+  } else {
+    console.log(`${t.claudeRegisterFailed}: ${result.error}`);
+  }
+  console.log(`${t.claudeManual}: claude mcp add --scope user vision-bridge -- ${serverCommand}`);
+}
+
+function registerClaudeCode(serverCommand) {
+  if (!findCommand("claude")) return { ok: false, missingClaude: true };
+
+  const existing = runCommand("claude", ["mcp", "get", "vision-bridge"]);
+  if (existing.status === 0 && existing.stdout.includes("vision-bridge:")) {
+    return { ok: true, already: true };
+  }
+
+  const added = runCommand("claude", ["mcp", "add", "--scope", "user", "vision-bridge", "--", serverCommand]);
+  if (added.status === 0) return { ok: true, already: false };
+
+  const message = [added.stderr, added.stdout].filter(Boolean).join(" ").trim() || `exit ${added.status}`;
+  return { ok: false, error: message };
+}
+
+function findCommand(command) {
+  const result = process.platform === "win32"
+    ? spawnSync("where.exe", [command], { encoding: "utf8", timeout: 10000 })
+    : spawnSync("sh", ["-lc", `command -v ${shellQuote(command)}`], { encoding: "utf8", timeout: 10000 });
+  if (result.status !== 0) return "";
+
+  const lines = String(result.stdout || "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (!lines.length) return "";
+  if (process.platform === "win32") {
+    return lines.find((line) => line.toLowerCase().endsWith(".cmd")) || lines[0];
+  }
+  return lines[0];
+}
+
+function runCommand(command, args) {
+  const result = spawnSync(command, args, {
+    encoding: "utf8",
+    timeout: 30000,
+    windowsHide: true,
+  });
+  return {
+    status: result.status ?? 1,
+    stdout: result.stdout || "",
+    stderr: result.stderr || result.error?.message || "",
+  };
+}
+
+function shellQuote(value) {
+  return `'${String(value).replace(/'/g, "'\\''")}'`;
+}
+
+function isTruthyEnv(value) {
+  return /^(1|true|yes|y)$/i.test(String(value || ""));
 }

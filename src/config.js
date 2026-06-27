@@ -84,6 +84,7 @@ export function baseConfig() {
       maxAutoSelectAgeSeconds: 180,
       maxDepth: 5,
       maxCandidates: 200,
+      includeMagicByteScan: true,
     },
   };
 }

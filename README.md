@@ -202,7 +202,8 @@ MCP servers cannot force a host model to call a tool by themselves. For near-sea
 ```text
 If the current model can natively see uploaded image attachments, answer directly and do not call MCP.
 If the current model is text-only, or the image is only shown as an attachment chip, call vision_analyze_attachment when the user says 上图, 参考图, 图1, 图2, screenshot, attached image, or the image above.
-Call it with no image path if the client did not expose the path; pass attachment_index for 图2/image 2.
+If the attachment chip shows a filename, dimensions, or path fragment, copy all visible chip text into attachment_hint, for example image.png 2911x1440 \temp\readonly\mcp_vision...
+Call it with no image path only if the client did not expose a path or visible chip text; pass attachment_index for 图2/image 2.
 ```
 
 With that rule, normal user prompts can be short:
@@ -233,7 +234,7 @@ Some IDEs show an uploaded image in chat but do not pass its absolute path to th
 
 ```json
 {
-  "attachment_hint": "image.png 2911x1440"
+  "attachment_hint": "image.png 2911x1440 \\temp\\readonly\\mcp_vision..."
 }
 ```
 
@@ -245,7 +246,7 @@ Or list candidates first:
 }
 ```
 
-The server only scans local temp directories, configured attachment directories, and `temp/tmp` under the current working directory. It does not scan the whole disk.
+The server only scans local temp directories, common `readonly` attachment temp directories, configured attachment directories, and `temp/tmp` under the current working directory. It does not scan the whole disk. It can also recognize extensionless PNG/JPEG/WebP/GIF/BMP files by magic bytes, which helps with clients that store uploaded attachments without a file extension.
 
 To avoid silently analyzing an old screenshot, unhinted auto-discovery only auto-selects very fresh images by default. If no attachment name, hint, path, URL, or Base64 is available, the server will only select images newer than `attachments.maxAutoSelectAgeSeconds` (default: 180 seconds). When an `attachment_hint` or `attachment_name` is provided, the server requires a filename or dimension match before auto-selecting.
 

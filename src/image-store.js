@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { discoverAttachmentImage } from "./attachment-discovery.js";
+import { detectImageMime, discoverAttachmentImage } from "./attachment-discovery.js";
 import { assertUrlFetchAllowed, isRemoteEndpoint } from "./privacy.js";
 
 const MIME_BY_EXT = {
@@ -43,6 +43,7 @@ export async function readImageInput(input, config, options = {}) {
       attachment_index: input.attachment_index || 1,
       matched_path: attachment.path,
       matched_file_name: attachment.fileName,
+      matched_mime: attachment.mime,
       matched_width: attachment.width,
       matched_height: attachment.height,
       matched_score: attachment.score,
@@ -104,7 +105,7 @@ function readImagePath(imagePath, config, sourceExtra = {}) {
   const ext = path.extname(resolved).toLowerCase();
   return {
     buffer: fs.readFileSync(resolved),
-    mime: MIME_BY_EXT[ext] || "image/jpeg",
+    mime: MIME_BY_EXT[ext] || sourceExtra.matched_mime || detectImageMime(resolved) || "image/jpeg",
     source: { image_path: resolved, ...sourceExtra },
   };
 }

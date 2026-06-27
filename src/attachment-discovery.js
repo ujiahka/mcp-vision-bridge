@@ -3,6 +3,13 @@ import os from "node:os";
 import path from "node:path";
 
 const IMAGE_EXTS = new Set([".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp"]);
+const IMAGE_MAGIC_BYTES = [
+  { mime: "image/png", bytes: [0x89, 0x50, 0x4e, 0x47] },
+  { mime: "image/jpeg", bytes: [0xff, 0xd8, 0xff] },
+  { mime: "image/gif", bytes: [0x47, 0x49, 0x46, 0x38] },
+  { mime: "image/bmp", bytes: [0x42, 0x4d] },
+  { mime: "image/webp", bytes: [0x52, 0x49, 0x46, 0x46], offset: 0, secondary: { offset: 8, bytes: [0x57, 0x45, 0x42, 0x50] } },
+];
 const SKIP_DIRS = new Set([".git", "node_modules", "$recycle.bin", "system volume information"]);
 
 let sharpPromise;
@@ -18,20 +25,21 @@ export async function listRecentAttachmentImages(input = {}, config) {
   const settings = attachmentSettings(config);
   if (!settings.autoDiscover && !input.auto_discover_attachment) return [];
 
-  const dirs = attachmentSearchDirs(settings);
+  const hint = buildHint(input);
+  const roots = attachmentSearchRoots(settings, hint);
   const sinceMs = Date.now() - settings.maxAgeMinutes * 60 * 1000;
   const found = [];
-  for (const dir of dirs) {
-    collectImages(dir, {
+  for (const root of roots) {
+    collectImages(root.dir, {
       found,
       sinceMs,
       maxDepth: settings.maxDepth,
       maxBytes: config.limits?.maxImageBytes || Infinity,
       maxCandidates: settings.maxCandidates * 4,
+      includeMagicByteScan: settings.includeMagicByteScan && root.includeMagicByteScan,
     });
   }
 
-  const hint = buildHint(input);
   const top = found
     .sort((a, b) => b.mtimeMs - a.mtimeMs)
     .slice(0, settings.maxCandidates);
@@ -61,22 +69,51 @@ function attachmentSettings(config) {
     maxAutoSelectAgeSeconds: clampNumber(attachments.maxAutoSelectAgeSeconds, 5, 24 * 60 * 60, 180),
     maxDepth: clampNumber(attachments.maxDepth, 0, 10, 5),
     maxCandidates: clampNumber(attachments.maxCandidates, 1, 1000, 200),
+    includeMagicByteScan: attachments.includeMagicByteScan !== false,
   };
 }
 
-function attachmentSearchDirs(settings) {
-  const dirs = [
-    ...settings.searchDirs,
-    process.env.TEMP,
-    process.env.TMP,
-    os.tmpdir(),
-  ];
+function attachmentSearchDirs(settings, hint = {}) {
+  return attachmentSearchRoots(settings, hint).map((root) => root.dir);
+}
+
+function attachmentSearchRoots(settings, hint = {}) {
+  const winTempDir = process.platform === "win32"
+    ? path.join(os.homedir(), "AppData", "Local", "Temp")
+    : "";
+  const rootDir = process.platform === "win32" ? path.parse(process.cwd()).root : "/";
+  const roots = [];
+  const add = (dir, includeMagicByteScan = false) => {
+    if (dir) roots.push({ dir, includeMagicByteScan });
+  };
+
+  for (const dir of settings.searchDirs) add(dir, true);
+  for (const dir of searchDirsFromHint(hint)) add(dir, true);
+
   if (process.platform === "win32") {
-    dirs.push(path.join(os.homedir(), "AppData", "Local", "Temp"));
+    add(path.join(winTempDir, "readonly"), true);
+    add(path.join(winTempDir, "claude"), true);
+    add(path.join(rootDir, "temp", "readonly"), true);
   }
-  dirs.push(path.join(process.cwd(), "temp"));
-  dirs.push(path.join(process.cwd(), "tmp"));
-  return [...new Set(dirs.filter(Boolean).map((dir) => path.resolve(dir)))].filter((dir) => fs.existsSync(dir));
+  add(path.join(process.cwd(), "temp"));
+  add(path.join(process.cwd(), "temp", "readonly"), true);
+  add(path.join(process.cwd(), "tmp"));
+  add(path.join(process.cwd(), "tmp", "readonly"), true);
+  add(process.env.TEMP);
+  add(process.env.TMP);
+  add(os.tmpdir());
+  add(winTempDir);
+
+  const seen = new Set();
+  const resolved = [];
+  for (const root of roots) {
+    const dir = path.resolve(root.dir);
+    const key = dir.toLowerCase();
+    if (seen.has(key) || !fs.existsSync(dir)) continue;
+    seen.add(key);
+    resolved.push({ dir, includeMagicByteScan: root.includeMagicByteScan });
+  }
+  return resolved;
 }
 
 function collectImages(dir, state, depth = 0) {
@@ -99,7 +136,9 @@ function collectImages(dir, state, depth = 0) {
       continue;
     }
     if (!entry.isFile()) continue;
-    if (!IMAGE_EXTS.has(path.extname(entry.name).toLowerCase())) continue;
+
+    const ext = path.extname(entry.name).toLowerCase();
+    if (!IMAGE_EXTS.has(ext) && !state.includeMagicByteScan) continue;
 
     let stat;
     try {
@@ -108,14 +147,59 @@ function collectImages(dir, state, depth = 0) {
       continue;
     }
     if (stat.size <= 0 || stat.size > state.maxBytes || stat.mtimeMs < state.sinceMs) continue;
+    const mime = imageMimeFromFile(fullPath, entry.name, state);
+    if (!mime) continue;
     state.found.push({
       path: fullPath,
       fileName: entry.name,
+      mime,
       bytes: stat.size,
       mtime: stat.mtime.toISOString(),
       mtimeMs: stat.mtimeMs,
     });
   }
+}
+
+function imageMimeFromFile(filePath, fileName, state) {
+  const ext = path.extname(fileName).toLowerCase();
+  if (IMAGE_EXTS.has(ext)) return mimeFromExt(ext);
+  if (!state.includeMagicByteScan) return false;
+  return detectImageMime(filePath);
+}
+
+function mimeFromExt(ext) {
+  if (ext === ".jpg" || ext === ".jpeg") return "image/jpeg";
+  if (ext === ".png") return "image/png";
+  if (ext === ".webp") return "image/webp";
+  if (ext === ".gif") return "image/gif";
+  if (ext === ".bmp") return "image/bmp";
+  return "";
+}
+
+export function detectImageMime(filePath) {
+  let header;
+  try {
+    const fd = fs.openSync(filePath, "r");
+    try {
+      header = Buffer.alloc(16);
+      fs.readSync(fd, header, 0, header.length, 0);
+    } finally {
+      fs.closeSync(fd);
+    }
+  } catch {
+    return "";
+  }
+
+  for (const signature of IMAGE_MAGIC_BYTES) {
+    if (!matchesBytes(header, signature.bytes, signature.offset || 0)) continue;
+    if (signature.secondary && !matchesBytes(header, signature.secondary.bytes, signature.secondary.offset)) continue;
+    return signature.mime;
+  }
+  return "";
+}
+
+function matchesBytes(buffer, bytes, offset = 0) {
+  return bytes.every((byte, index) => buffer[offset + index] === byte);
 }
 
 async function enrichCandidates(candidates) {
@@ -140,15 +224,40 @@ function buildHint(input) {
     input.attachment_name,
     input.attachment_hint,
     input.image_name,
+    input.reference,
+    input.task,
+    input.prompt,
+    input.question,
   ].filter(Boolean).join(" ");
   const dimensions = parseDimensions(raw);
   const tokens = raw.toLowerCase().match(/[a-z0-9._-]{4,}/g) || [];
   return {
     hasHint: Boolean(raw || dimensions),
+    rawOriginal: raw,
     raw: raw.toLowerCase(),
     dimensions,
     tokens,
   };
+}
+
+function searchDirsFromHint(hint) {
+  const raw = String(hint.rawOriginal || hint.raw || "");
+  if (!raw) return [];
+
+  const dirs = [];
+  const matches = raw.match(/(?:[a-z]:)?[\\/][^\s"'<>|]+/gi) || [];
+  for (const match of matches) {
+    let value = match.replace(/[.,;:)\]}]+$/g, "");
+    value = value.replace(/\.{2,}.*$/g, "");
+    if (!value) continue;
+
+    if (process.platform === "win32" && /^\\/.test(value)) {
+      value = `${path.parse(process.cwd()).root.replace(/\\$/, "")}${value}`;
+    }
+    dirs.push(value);
+    dirs.push(path.dirname(value));
+  }
+  return dirs;
 }
 
 function scoreCandidate(candidate, hint, settings) {

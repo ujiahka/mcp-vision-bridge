@@ -42,6 +42,7 @@ try {
   console.log(`Attachment auto-discovery: ${attachmentStatus.autoDiscover ? "enabled" : "disabled"}`);
   console.log(`Attachment max age minutes: ${attachmentStatus.maxAgeMinutes}`);
   console.log(`Attachment max auto-select age seconds: ${attachmentStatus.maxAutoSelectAgeSeconds}`);
+  console.log(`Attachment magic-byte scan: ${attachmentStatus.includeMagicByteScan ? "enabled" : "disabled"}`);
   console.log(`Attachment search dirs: ${attachmentStatus.searchDirs.join("; ")}`);
 } catch (err) {
   console.error(`Config: failed - ${err.message}`);

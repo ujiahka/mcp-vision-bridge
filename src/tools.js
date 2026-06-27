@@ -12,7 +12,7 @@ const IMAGE_INPUT_PROPERTIES = {
   image_base64: { type: "string", description: "Raw base64 image or data:image/...;base64,... value." },
   mime_type: { type: "string", description: "MIME type for raw base64 input, e.g. image/png." },
   attachment_name: { type: "string", description: "Optional attachment file name shown by the client, e.g. image.png." },
-  attachment_hint: { type: "string", description: "Optional free-form hint from the attachment chip, e.g. image.png 2911x1440 temp/readonly." },
+  attachment_hint: { type: "string", description: "Optional free-form hint from the attachment chip. Include all visible chip text/path fragments, e.g. 'image.png 2911x1440 \\temp\\readonly\\mcp_vision...'." },
   attachment_index: { type: "number", description: "Use the Nth newest matching auto-discovered attachment image. Default is 1." },
   auto_discover_attachment: { type: "boolean", description: "Search recent local temp images when no explicit image input is provided. Enabled by default in config." },
 };
@@ -40,7 +40,7 @@ export function listTools() {
     },
     {
       name: "vision_analyze_attachment",
-      description: "One-shot image analysis for uploaded/pasted attachments when the user says common references such as 上图, 参考图, 图1, 图2, screenshot, attached image, or the image above. Call this with no image args when no path is visible; use attachment_index for 图2/image 2. If the host model can natively inspect the image attachment, answer directly instead of calling this MCP tool.",
+      description: "One-shot image analysis for uploaded/pasted attachments when the user says common references such as 上图, 参考图, 图1, 图2, screenshot, attached image, or the image above. If the attachment chip shows a filename, dimensions, or path fragment, pass that visible text as attachment_hint. Call this with no image args only when no path or chip text is visible; use attachment_index for 图2/image 2. If the host model can natively inspect the image attachment, answer directly instead of calling this MCP tool.",
       inputSchema: {
         type: "object",
         properties: {
@@ -242,6 +242,7 @@ async function listRecentImagesTool(args, config) {
       attachment_index: index + 1,
       path: image.path,
       fileName: image.fileName,
+      mime: image.mime,
       bytes: image.bytes,
       width: image.width,
       height: image.height,

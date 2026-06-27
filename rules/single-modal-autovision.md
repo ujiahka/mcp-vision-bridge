@@ -18,6 +18,7 @@ Image-related inputs include:
 ## Tool Routing
 
 - Uploaded/pasted image with no visible path: call `vision_analyze_attachment` with the user request in `task`.
+- If the attachment chip shows visible metadata such as `image.png`, `2911x1440`, `2911×1440`, or a path fragment like `\temp\readonly\mcp_vision...`, copy all visible chip text into `attachment_hint`. Do this even when the path is truncated.
 - Explicit image path or URL: pass `image_path` or `image_url` to the most relevant `vision_*` tool.
 - Screenshot saved by Playwright/webapp-testing: call `vision_analyze_screenshot` immediately with `image_path` and the visual review goal in `task`.
 - OCR request: call `vision_ocr_image`.
@@ -29,4 +30,3 @@ Image-related inputs include:
 ## Response Style
 
 After the MCP tool returns, answer naturally. Do not expose tool plumbing unless it helps debugging. If the vision result is uncertain, say what is uncertain and what can be confirmed from the image.
-

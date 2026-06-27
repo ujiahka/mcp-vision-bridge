@@ -10,14 +10,19 @@ const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
 try {
   const stalePath = path.join(tmpDir, "stale-upload.png");
   const freshPath = path.join(tmpDir, "fresh-upload.png");
+  const readonlyDir = path.join(tmpDir, "readonly", "mcp_vision_case");
+  const extensionlessPath = path.join(readonlyDir, "payload");
+  fs.mkdirSync(readonlyDir, { recursive: true });
   fs.writeFileSync(stalePath, png);
   fs.writeFileSync(freshPath, png);
+  fs.writeFileSync(extensionlessPath, png);
 
   const now = Date.now();
   const staleTime = new Date(now - 10 * 60 * 1000);
   const freshTime = new Date(now + 1000);
   fs.utimesSync(stalePath, staleTime, staleTime);
   fs.utimesSync(freshPath, freshTime, freshTime);
+  fs.utimesSync(extensionlessPath, freshTime, freshTime);
 
   const config = {
     attachments: {
@@ -54,6 +59,13 @@ try {
   const matchedHint = await discoverAttachmentImage({ attachment_hint: "stale-upload.png 1x1" }, config);
   if (matchedHint?.path !== stalePath) {
     throw new Error(`Expected exact hint to select stale image, got ${matchedHint?.path}`);
+  }
+
+  const pathHint = await discoverAttachmentImage({
+    attachment_hint: `${path.join(readonlyDir, "mcp_vision_payload")} image.png 1×1`,
+  }, config);
+  if (pathHint?.path !== extensionlessPath || pathHint.mime !== "image/png") {
+    throw new Error(`Expected path/dimension hint to select extensionless PNG, got ${pathHint?.path} ${pathHint?.mime}`);
   }
 
   console.log("attachment-discovery: ok");

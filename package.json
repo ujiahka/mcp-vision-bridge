@@ -1,0 +1,40 @@
+{
+  "name": "mcp-vision-bridge",
+  "version": "0.1.0",
+  "description": "MCP vision bridge that adds image understanding to text-only AI coding agents using local or API vision models.",
+  "type": "module",
+  "bin": {
+    "mcp-vision-bridge": "./src/server.js",
+    "mcp-vision-bridge-init": "./src/init-config.js",
+    "mcp-vision-bridge-doctor": "./src/doctor.js",
+    "claude-vision-mcp": "./src/server.js",
+    "claude-vision-mcp-init": "./src/init-config.js",
+    "claude-vision-mcp-doctor": "./src/doctor.js"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "init": "node src/init-config.js",
+    "doctor": "node src/doctor.js",
+    "check": "node --check src/server.js && node --check src/init-config.js && node --check src/doctor.js && node --check src/attachment-discovery.js && node --check src/audit-log.js && node --check src/config.js && node --check src/image-preprocess.js && node --check src/image-store.js && node --check src/privacy.js && node --check src/prompts.js && node --check src/tools.js && node --check src/vision-client.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "mcp",
+    "mcp-server",
+    "vision",
+    "image-recognition",
+    "multimodal",
+    "ai-coding-agent",
+    "vision-bridge",
+    "local-ai",
+    "anthropic-compatible",
+    "openai-compatible",
+    "qwen-vl"
+  ],
+  "optionalDependencies": {
+    "sharp": "^0.33.5"
+  },
+  "license": "MIT"
+}

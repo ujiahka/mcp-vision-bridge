@@ -1,0 +1,14 @@
+node_modules/
+tmp/
+outputs/
+.env
+.env.*
+*.log
+dist/
+coverage/
+*.tgz
+.local-vision-mcp/
+.mcp-vision-bridge/
+work/*.json
+work/*-data/
+work/test-data/

@@ -1,0 +1,68 @@
+{
+  "providers": {
+    "bailianCoding": {
+      "name": {
+        "zh": "阿里云百炼",
+        "en": "Alibaba Cloud Bailian"
+      },
+      "provider": "aliyun-bailian",
+      "plan": "bailian",
+      "type": "openai-compatible",
+      "baseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+      "model": "qwen3.5-omni-plus"
+    },
+    "xiaomiToken": {
+      "name": {
+        "zh": "小米 MiMo Token Plan",
+        "en": "Xiaomi MiMo Token Plan"
+      },
+      "provider": "xiaomi-mimo",
+      "plan": "token",
+      "type": "openai-compatible",
+      "baseUrls": {
+        "openai-compatible": "https://token-plan-cn.xiaomimimo.com/v1",
+        "anthropic-compatible": "https://token-plan-cn.xiaomimimo.com/anthropic"
+      },
+      "model": "mimo-v2.5"
+    },
+    "volcengineAgent": {
+      "name": {
+        "zh": "火山引擎 Agent Plan",
+        "en": "Volcengine Agent Plan"
+      },
+      "provider": "volcengine",
+      "plan": "agent",
+      "type": "openai-compatible",
+      "baseUrls": {
+        "openai-compatible": "https://ark.cn-beijing.volces.com/api/plan/v3",
+        "anthropic-compatible": "https://ark.cn-beijing.volces.com/api/plan"
+      },
+      "model": "mimo-v2.5"
+    },
+    "volcengineCoding": {
+      "name": {
+        "zh": "火山引擎 Coding Plan",
+        "en": "Volcengine Coding Plan"
+      },
+      "provider": "volcengine",
+      "plan": "coding",
+      "type": "openai-compatible",
+      "baseUrls": {
+        "openai-compatible": "https://ark.cn-beijing.volces.com/api/coding/v3",
+        "anthropic-compatible": "https://ark.cn-beijing.volces.com/api/coding"
+      },
+      "model": "mimo-v2.5"
+    },
+    "opencodeGo": {
+      "name": {
+        "zh": "OpenCode Go",
+        "en": "OpenCode Go"
+      },
+      "provider": "opencode",
+      "plan": "go",
+      "type": "openai-compatible",
+      "baseUrl": "https://opencode.ai/zen/go",
+      "model": "mimo-v2.5"
+    }
+  }
+}

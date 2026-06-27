@@ -628,14 +628,15 @@ async function promptClientRegistration(t) {
 }
 
 function registerClaudeCode(serverCommand) {
-  if (!findCommand("claude")) return { ok: false, missingClaude: true };
+  const claudeCommand = findCommand("claude");
+  if (!claudeCommand) return { ok: false, missingClaude: true };
 
-  const existing = runCommand("claude", ["mcp", "get", "vision-bridge"]);
+  const existing = runCommand(claudeCommand, ["mcp", "get", "vision-bridge"]);
   if (existing.status === 0 && existing.stdout.includes("vision-bridge:")) {
     return { ok: true, already: true };
   }
 
-  const added = runCommand("claude", ["mcp", "add", "--scope", "user", "vision-bridge", "--", serverCommand]);
+  const added = runCommand(claudeCommand, ["mcp", "add", "--scope", "user", "vision-bridge", "--", serverCommand]);
   if (added.status === 0) return { ok: true, already: false };
 
   const message = [added.stderr, added.stdout].filter(Boolean).join(" ").trim() || `exit ${added.status}`;
@@ -660,7 +661,7 @@ function findCommand(command) {
 }
 
 function runCommand(command, args) {
-  const result = spawnSync(command, args, {
+  const result = spawnCommand(command, args, {
     encoding: "utf8",
     timeout: 30000,
     windowsHide: true,
@@ -670,6 +671,24 @@ function runCommand(command, args) {
     stdout: result.stdout || "",
     stderr: result.stderr || result.error?.message || "",
   };
+}
+
+function spawnCommand(command, args, options) {
+  if (process.platform === "win32" && /\.(cmd|bat)$/i.test(command)) {
+    return spawnSync(process.env.ComSpec || "cmd.exe", [
+      "/d",
+      "/s",
+      "/c",
+      [winShellQuote(command), ...args.map(winShellQuote)].join(" "),
+    ], options);
+  }
+  return spawnSync(command, args, options);
+}
+
+function winShellQuote(value) {
+  const text = String(value);
+  if (!/[ \t&()^|<>"]/u.test(text)) return text;
+  return `"${text.replace(/"/g, '""')}"`;
 }
 
 function shellQuote(value) {

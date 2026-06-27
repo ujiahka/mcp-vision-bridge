@@ -46,9 +46,11 @@ export async function readImageInput(input, config, options = {}) {
       matched_width: attachment.width,
       matched_height: attachment.height,
       matched_score: attachment.score,
+      matched_age_seconds: attachment.ageSeconds,
+      matched_auto_select_reason: attachment.autoSelectReason,
     });
   }
-  throw new Error("Provide one of image_id, image_path, image_url, image_base64, or enable/use attachment auto-discovery with a recent local image attachment.");
+  throw new Error("No current local attachment image was found. Provide image_path/image_url/image_base64, or paste/upload the image again and call attachment auto-discovery within the fresh-image window.");
 }
 
 export function registerImage(image, config, source = {}) {

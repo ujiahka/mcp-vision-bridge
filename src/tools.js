@@ -248,6 +248,9 @@ async function listRecentImagesTool(args, config) {
       mtime: image.mtime,
       ageSeconds: image.ageSeconds,
       score: image.score,
+      hintMatchScore: image.hintMatchScore,
+      autoSelectable: image.autoSelectable,
+      autoSelectReason: image.autoSelectReason,
     })),
   }, null, 2);
 }

@@ -10,7 +10,8 @@ let sharpPromise;
 export async function discoverAttachmentImage(input = {}, config) {
   const candidates = await listRecentAttachmentImages(input, config);
   const index = Math.max(0, Number(input.attachment_index || 1) - 1);
-  return candidates[index] || null;
+  const eligible = candidates.filter((candidate) => candidate.autoSelectable);
+  return eligible[index] || null;
 }
 
 export async function listRecentAttachmentImages(input = {}, config) {
@@ -36,11 +37,7 @@ export async function listRecentAttachmentImages(input = {}, config) {
     .slice(0, settings.maxCandidates);
   const enriched = await enrichCandidates(top);
   return enriched
-    .map((candidate) => ({
-      ...candidate,
-      score: scoreCandidate(candidate, hint),
-      ageSeconds: Math.max(0, Math.round((Date.now() - candidate.mtimeMs) / 1000)),
-    }))
+    .map((candidate) => scoreCandidate(candidate, hint, settings))
     .sort((a, b) => {
       if (hint.hasHint && b.score !== a.score) return b.score - a.score;
       return b.mtimeMs - a.mtimeMs;
@@ -61,6 +58,7 @@ function attachmentSettings(config) {
     autoDiscover: attachments.autoDiscover !== false,
     searchDirs: Array.isArray(attachments.searchDirs) ? attachments.searchDirs : [],
     maxAgeMinutes: clampNumber(attachments.maxAgeMinutes, 1, 24 * 60, 60),
+    maxAutoSelectAgeSeconds: clampNumber(attachments.maxAutoSelectAgeSeconds, 5, 24 * 60 * 60, 180),
     maxDepth: clampNumber(attachments.maxDepth, 0, 10, 5),
     maxCandidates: clampNumber(attachments.maxCandidates, 1, 1000, 200),
   };
@@ -153,7 +151,27 @@ function buildHint(input) {
   };
 }
 
-function scoreCandidate(candidate, hint) {
+function scoreCandidate(candidate, hint, settings) {
+  const ageSeconds = Math.max(0, Math.round((Date.now() - candidate.mtimeMs) / 1000));
+  const hintMatchScore = scoreHintMatch(candidate, hint);
+  const recencyScore = Math.max(0, 10 - Math.round(ageSeconds / 60));
+  const autoSelectable = hint.hasHint
+    ? hintMatchScore > 0
+    : ageSeconds <= settings.maxAutoSelectAgeSeconds;
+
+  return {
+    ...candidate,
+    score: hint.hasHint ? hintMatchScore + recencyScore : recencyScore,
+    hintMatchScore,
+    ageSeconds,
+    autoSelectable,
+    autoSelectReason: autoSelectable
+      ? (hint.hasHint ? "hint_match" : "fresh_unhinted")
+      : (hint.hasHint ? "hint_not_matched" : "too_old_unhinted"),
+  };
+}
+
+function scoreHintMatch(candidate, hint) {
   let score = 0;
   if (!hint.hasHint) return score;
 
@@ -171,7 +189,6 @@ function scoreCandidate(candidate, hint) {
       score += 100;
     }
   }
-  score += Math.max(0, 10 - Math.round((Date.now() - candidate.mtimeMs) / 60000));
   return score;
 }
 

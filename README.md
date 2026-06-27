@@ -247,6 +247,10 @@ Or list candidates first:
 
 The server only scans local temp directories, configured attachment directories, and `temp/tmp` under the current working directory. It does not scan the whole disk.
 
+To avoid silently analyzing an old screenshot, unhinted auto-discovery only auto-selects very fresh images by default. If no attachment name, hint, path, URL, or Base64 is available, the server will only select images newer than `attachments.maxAutoSelectAgeSeconds` (default: 180 seconds). When an `attachment_hint` or `attachment_name` is provided, the server requires a filename or dimension match before auto-selecting.
+
+If the wrong image is selected, call `vision_list_recent_images` and inspect `autoSelectable`, `autoSelectReason`, `ageSeconds`, and `path`. If the client did not save or expose the new attachment locally, paste/upload the image again or provide an explicit `image_path`.
+
 ## Multi-turn Vision
 
 Register an image once:
@@ -307,6 +311,7 @@ VISION_IMAGE_JPEG_QUALITY=85
 VISION_ATTACHMENTS_AUTO_DISCOVER=true
 VISION_ATTACHMENT_DIRS=C:/extra/attachment/dir
 VISION_ATTACHMENT_MAX_AGE_MINUTES=60
+VISION_ATTACHMENT_MAX_AUTO_SELECT_AGE_SECONDS=180
 ```
 
 ## Provider Compatibility

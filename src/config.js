@@ -81,6 +81,7 @@ export function baseConfig() {
       autoDiscover: true,
       searchDirs: [],
       maxAgeMinutes: 60,
+      maxAutoSelectAgeSeconds: 180,
       maxDepth: 5,
       maxCandidates: 200,
     },
@@ -102,6 +103,7 @@ export function applyEnvOverrides(config) {
   if (process.env.VISION_ATTACHMENTS_AUTO_DISCOVER) next.attachments.autoDiscover = parseBool(process.env.VISION_ATTACHMENTS_AUTO_DISCOVER);
   if (process.env.VISION_ATTACHMENT_DIRS) next.attachments.searchDirs = process.env.VISION_ATTACHMENT_DIRS.split(path.delimiter).filter(Boolean);
   if (process.env.VISION_ATTACHMENT_MAX_AGE_MINUTES) next.attachments.maxAgeMinutes = Number(process.env.VISION_ATTACHMENT_MAX_AGE_MINUTES);
+  if (process.env.VISION_ATTACHMENT_MAX_AUTO_SELECT_AGE_SECONDS) next.attachments.maxAutoSelectAgeSeconds = Number(process.env.VISION_ATTACHMENT_MAX_AUTO_SELECT_AGE_SECONDS);
   if (process.env.VISION_MCP_DATA_DIR) {
     next.dataDir = process.env.VISION_MCP_DATA_DIR;
     if (!process.env.VISION_MCP_LOG_DIR) next.logging.dir = path.join(next.dataDir, "logs");

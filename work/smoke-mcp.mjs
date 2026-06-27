@@ -221,6 +221,11 @@ child.on("exit", () => {
     console.error({ responses, stderr });
     process.exit(1);
   }
+  if (!recentImages.result.content[0].text.includes("autoSelectable")) {
+    console.error("Missing attachment auto-selectability metadata");
+    console.error({ responses, stderr });
+    process.exit(1);
+  }
   if (!autoRegister?.result?.content?.[0]?.text?.includes("auto_discovered_attachment")) {
     console.error("Missing auto-discovered register response");
     console.error({ responses, stderr });

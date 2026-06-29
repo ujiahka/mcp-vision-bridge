@@ -346,9 +346,10 @@ mvb 4          # 查看模型列表
 mvb 5 2        # 切换到第 2 个模型配置档
 mvb 5 <id>     # 按配置 ID 切换
 mvb 6          # 运行 doctor 诊断
-mvb 7          # 重新运行安装向导
+mvb 7          # 重新运行安装向导，追加模型配置档
 mvb 8          # 查看配置、数据和日志路径
 mvb 10         # 打印 MCP 客户端配置片段
+mvb 11         # 卸载前还原/清理客户端配置
 ```
 
 长命令别名：
@@ -800,7 +801,27 @@ where mcp-vision-bridge
 
 ## 17. 卸载
 
-卸载全局命令：
+建议先清理 MCP 客户端配置，再卸载 npm 包：
+
+```bash
+mcp-vision-bridge-uninstall
+```
+
+或者使用管理面板别名：
+
+```bash
+mvb 11
+```
+
+该命令会优先恢复本项目创建的 `.bak-mcp-vision-bridge` 备份；如果没有备份，则只移除已知的 `vision-bridge` / `mcp-vision-bridge` / `claude-vision-mcp` 客户端配置项和带标记的自动识图规则块。它会在写入前创建 `.bak-before-mcp-vision-bridge-uninstall-*` 安全备份。
+
+如果只想预览将要修改的文件：
+
+```bash
+mcp-vision-bridge-uninstall --dry-run
+```
+
+确认客户端配置已清理后，再卸载全局命令：
 
 ```bash
 npm uninstall -g mcp-vision-bridge
@@ -811,8 +832,6 @@ npm uninstall -g mcp-vision-bridge
 ```bash
 npm uninstall -g local-vision-mcp
 ```
-
-删除 Claude Code MCP 注册项时，请使用 Claude Code 自身的 MCP 管理命令或手动删除对应配置项。
 
 可选：删除本地配置和数据。
 
@@ -1163,9 +1182,10 @@ mvb 4          # List model profiles
 mvb 5 2        # Switch to profile #2
 mvb 5 <id>     # Switch by profile id
 mvb 6          # Run doctor
-mvb 7          # Run setup wizard again
+mvb 7          # Run setup wizard again and append model profiles
 mvb 8          # Show config/data/log paths
 mvb 10         # Print MCP client snippets
+mvb 11         # Restore/clean client config before uninstall
 ```
 
 Long alias:
@@ -1443,6 +1463,28 @@ where mcp-vision-bridge
 ```
 
 ## 16. Uninstall
+
+Clean MCP client configuration before uninstalling the npm package:
+
+```bash
+mcp-vision-bridge-uninstall
+```
+
+Or use the management alias:
+
+```bash
+mvb 11
+```
+
+The cleanup command first restores `.bak-mcp-vision-bridge` backups created for this project. If no backup exists, it only removes known `vision-bridge` / `mcp-vision-bridge` / `claude-vision-mcp` client entries and marked auto-vision instruction blocks. Before writing, it creates a `.bak-before-mcp-vision-bridge-uninstall-*` safety backup.
+
+Preview the files that would be changed:
+
+```bash
+mcp-vision-bridge-uninstall --dry-run
+```
+
+Then uninstall the global package:
 
 ```bash
 npm uninstall -g mcp-vision-bridge

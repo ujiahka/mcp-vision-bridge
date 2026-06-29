@@ -193,3 +193,94 @@ if (backConfig.provider.name !== "local") {
 if (!backConfig.profiles || !backConfig.activeProfile) {
   throw new Error("Back navigation config did not write profiles.");
 }
+
+const appendConfigPath = path.join(root, "work", "init-append-config.json");
+const appendDataDir = path.join(root, "work", "init-append-data");
+const appendLogDir = path.join(root, "work", "init-append-logs");
+fs.writeFileSync(appendConfigPath, JSON.stringify({
+  version: 1,
+  language: "en",
+  vision: {
+    enabled: false,
+  },
+  activeProfile: "existing-local",
+  provider: {
+    name: "existing-local",
+    type: "openai-compatible",
+    plan: "local",
+    baseUrl: "http://127.0.0.1:1234/v1",
+    model: "qwen/existing",
+    apiKey: "local",
+  },
+  profiles: {
+    "existing-local": {
+      name: "Existing Local",
+      provider: {
+        name: "existing-local",
+        type: "openai-compatible",
+        plan: "local",
+        baseUrl: "http://127.0.0.1:1234/v1",
+        model: "qwen/existing",
+        apiKey: "local",
+      },
+    },
+  },
+  privacy: {
+    allowRemoteEndpoint: false,
+    allowUrlFetch: true,
+    telemetry: false,
+    storeImages: true,
+  },
+  dataDir: appendDataDir,
+  logging: {
+    enabled: true,
+    includePrompt: true,
+    includeResult: false,
+    dir: appendLogDir,
+  },
+}, null, 2));
+
+await runInit("init-en-append-profile", appendConfigPath, [
+  "2",
+  "2",
+  "",
+  "qwen/new",
+  "",
+  "",
+  "",
+  "",
+  "",
+  "",
+  "",
+  "",
+  "",
+], noCatalogEnv);
+
+const appendConfig = JSON.parse(fs.readFileSync(appendConfigPath, "utf8"));
+if (!appendConfig.profiles["existing-local"]) {
+  throw new Error("Existing profile was removed during append setup.");
+}
+if (!appendConfig.profiles["local-local-qwen-new"]) {
+  throw new Error(`New appended profile is missing. Profiles: ${Object.keys(appendConfig.profiles).join(", ")}`);
+}
+if (appendConfig.activeProfile !== "existing-local") {
+  throw new Error(`Append setup should preserve the active profile, got: ${appendConfig.activeProfile}`);
+}
+if (appendConfig.provider.model !== "qwen/existing") {
+  throw new Error(`Append setup should preserve the active provider, got: ${appendConfig.provider.model}`);
+}
+if (appendConfig.dataDir !== appendDataDir) {
+  throw new Error(`Append setup should preserve dataDir, got: ${appendConfig.dataDir}`);
+}
+if (appendConfig.logging.dir !== appendLogDir) {
+  throw new Error(`Append setup should preserve log dir, got: ${appendConfig.logging.dir}`);
+}
+if (appendConfig.logging.includeResult !== false) {
+  throw new Error("Append setup should preserve includeResult default.");
+}
+if (appendConfig.privacy.allowUrlFetch !== true) {
+  throw new Error("Append setup should preserve allowUrlFetch default.");
+}
+if (appendConfig.vision.enabled !== false) {
+  throw new Error("Append setup should preserve the vision switch.");
+}

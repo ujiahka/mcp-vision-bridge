@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import readline from "node:readline";
 import { stdin as input, stdout as output } from "node:process";
-import { baseConfig, defaultConfigDir, defaultConfigPath, defaultDataDir, legacyConfigDir, saveConfig } from "./config.js";
+import { baseConfig, defaultConfigDir, defaultConfigPath, defaultDataDir, legacyConfigDir, legacyConfigPath, loadConfig, saveConfig } from "./config.js";
 import { isRemoteEndpoint, parseUrl } from "./privacy.js";
 
 const rl = readline.createInterface({ input, crlfDelay: Infinity });
@@ -72,6 +73,7 @@ const TEXT = {
   zh: {
     setupTitle: "MCP Vision Bridge 安装向导",
     setupIntro: "此向导会在部署前写入本地配置文件，不会启用遥测。",
+    appendIntro: "检测到已有配置，将在现有模型列表基础上继续添加，不会清空旧模型。",
     providerMode: "请选择视觉模型来源",
     modeApi: "API 订阅/云端服务",
     modeLocal: "本地或局域网大模型 URL",
@@ -128,6 +130,7 @@ const TEXT = {
   en: {
     setupTitle: "MCP Vision Bridge setup",
     setupIntro: "This writes a local config file before deployment. Telemetry is disabled.",
+    appendIntro: "Existing config found. New model profiles will be appended without clearing old profiles.",
     providerMode: "Choose vision model source",
     modeApi: "API subscription / cloud provider",
     modeLocal: "Local or LAN model URL",
@@ -248,24 +251,34 @@ async function chooseLanguage() {
 }
 
 async function promptConfig(language, t) {
-  const config = baseConfig();
+  const existingConfig = loadExistingConfig();
+  const existingProfiles = existingProfilesForAppend(existingConfig);
+  const existingProfileIds = Object.keys(existingProfiles);
+  const config = existingConfig ? structuredClone(existingConfig) : baseConfig();
   config.language = language;
 
   console.log("");
   console.log(t.setupTitle);
   console.log(t.setupIntro);
+  if (existingProfileIds.length) console.log(t.appendIntro);
   console.log(t.backHint);
   console.log("");
 
-  const profileResult = await promptProfiles(language, t);
+  const profileResult = await promptProfiles(language, t, new Set(existingProfileIds));
 
   for (;;) {
-    const postSettings = await promptPostSettings(t, profileResult.allowRemoteEndpoint);
+    const allowRemoteEndpoint = Boolean(config.privacy?.allowRemoteEndpoint || profileResult.allowRemoteEndpoint);
+    const postSettings = await promptPostSettings(t, allowRemoteEndpoint, config);
+    const profiles = {
+      ...existingProfiles,
+      ...profileResult.profiles,
+    };
+    const activeProfile = resolveActiveProfile(config.activeProfile, profiles, profileResult.activeProfile);
 
-    config.activeProfile = profileResult.activeProfile;
-    config.profiles = profileResult.profiles;
-    config.provider = profileResult.profiles[profileResult.activeProfile].provider;
-    config.privacy.allowRemoteEndpoint = profileResult.allowRemoteEndpoint;
+    config.activeProfile = activeProfile;
+    config.profiles = profiles;
+    config.provider = profiles[activeProfile].provider;
+    config.privacy.allowRemoteEndpoint = allowRemoteEndpoint;
     config.privacy.allowUrlFetch = postSettings.allowUrlFetch;
     config.privacy.telemetry = false;
     config.privacy.storeImages = true;
@@ -273,7 +286,7 @@ async function promptConfig(language, t) {
     config.logging.enabled = postSettings.loggingEnabled;
     config.logging.includePrompt = postSettings.loggingEnabled;
     config.logging.includeResult = postSettings.includeResult;
-    config.logging.dir = path.join(postSettings.dataDir, "logs");
+    config.logging.dir = postSettings.logDir;
 
     try {
       await confirmSummary(config, t);
@@ -284,19 +297,56 @@ async function promptConfig(language, t) {
   }
 }
 
-async function promptProfiles(language, t) {
+function loadExistingConfig() {
+  const configPath = defaultConfigPath();
+  const fallbackConfigPath = legacyConfigPath();
+  const hasConfig = fs.existsSync(configPath) || (!process.env.VISION_MCP_CONFIG && fs.existsSync(fallbackConfigPath));
+  if (!hasConfig) return null;
+
+  try {
+    return loadConfig();
+  } catch (err) {
+    console.warn(`Warning: existing config was ignored: ${err.message}`);
+    return null;
+  }
+}
+
+function existingProfilesForAppend(config) {
+  const profiles = structuredClone(config?.profiles || {});
+  const keys = Object.keys(profiles);
+  if (keys.length === 1 && keys[0] === "default" && !hasProviderConfig(profiles.default?.provider)) {
+    delete profiles.default;
+  }
+  return profiles;
+}
+
+function hasProviderConfig(provider = {}) {
+  return Boolean(provider.model || provider.baseUrl || provider.apiKey);
+}
+
+function resolveActiveProfile(currentActiveProfile, profiles, firstAddedProfile) {
+  if (currentActiveProfile && profiles[currentActiveProfile] && hasProviderConfig(profiles[currentActiveProfile].provider)) {
+    return currentActiveProfile;
+  }
+  if (firstAddedProfile && profiles[firstAddedProfile]) return firstAddedProfile;
+  return Object.keys(profiles)[0] || "default";
+}
+
+async function promptProfiles(language, t, existingIds = new Set()) {
   const profiles = {};
   const order = [];
+  const usedIds = new Set(existingIds);
   let allowRemoteEndpoint = false;
 
   for (;;) {
     try {
-      const profile = await promptProfile(language, t, order.length + 1, new Set(order));
+      const profile = await promptProfile(language, t, usedIds.size + 1, usedIds);
       profiles[profile.id] = {
         name: profile.name,
         provider: profile.provider,
       };
       order.push(profile.id);
+      usedIds.add(profile.id);
       allowRemoteEndpoint = allowRemoteEndpoint || profile.remoteEndpointAllowed;
 
       const more = await confirm(t.addAnotherProfile, false, t);
@@ -309,6 +359,7 @@ async function promptProfiles(language, t) {
       }
       const previous = order.pop();
       delete profiles[previous];
+      usedIds.delete(previous);
       continue;
     }
   }
@@ -406,20 +457,23 @@ async function promptProfile(language, t, profileNumber, existingIds) {
   };
 }
 
-async function promptPostSettings(t, defaultAllowUrlFetch) {
+async function promptPostSettings(t, defaultAllowUrlFetch, existingConfig = null) {
   const state = {};
+  const defaultDataDirValue = existingConfig?.dataDir || defaultDataDir();
+  const defaultLoggingEnabled = existingConfig?.logging?.enabled ?? true;
+  const defaultIncludeResult = existingConfig?.logging?.includeResult ?? true;
   const steps = [
     async () => {
-      state.allowUrlFetch = await confirm(t.allowUrlFetch, defaultAllowUrlFetch, t);
+      state.allowUrlFetch = await confirm(t.allowUrlFetch, existingConfig?.privacy?.allowUrlFetch || defaultAllowUrlFetch, t);
     },
     async () => {
-      state.dataDir = await askRequired(t.dataDir, defaultDataDir(), t);
+      state.dataDir = await askRequired(t.dataDir, defaultDataDirValue, t);
     },
     async () => {
-      state.loggingEnabled = await confirm(t.enableLogs, true, t);
+      state.loggingEnabled = await confirm(t.enableLogs, defaultLoggingEnabled, t);
     },
     async () => {
-      state.includeResult = state.loggingEnabled ? await confirm(t.includeResult, true, t) : false;
+      state.includeResult = state.loggingEnabled ? await confirm(t.includeResult, defaultIncludeResult, t) : false;
     },
   ];
 
@@ -438,6 +492,9 @@ async function promptPostSettings(t, defaultAllowUrlFetch) {
     }
   }
 
+  state.logDir = existingConfig?.logging?.dir && state.dataDir === existingConfig.dataDir
+    ? existingConfig.logging.dir
+    : path.join(state.dataDir, "logs");
   return state;
 }
 
@@ -636,11 +693,24 @@ function registerClaudeCode(serverCommand) {
     return { ok: true, already: true };
   }
 
+  backupClaudeConfig();
   const added = runCommand(claudeCommand, ["mcp", "add", "--scope", "user", "vision-bridge", "--", serverCommand]);
   if (added.status === 0) return { ok: true, already: false };
 
   const message = [added.stderr, added.stdout].filter(Boolean).join(" ").trim() || `exit ${added.status}`;
   return { ok: false, error: message };
+}
+
+function backupClaudeConfig() {
+  const configPath = process.env.VISION_CLAUDE_CONFIG_PATH || path.join(os.homedir(), ".claude.json");
+  const backupPath = `${configPath}.bak-mcp-vision-bridge`;
+  try {
+    if (fs.existsSync(configPath) && !fs.existsSync(backupPath)) {
+      fs.copyFileSync(configPath, backupPath);
+    }
+  } catch {
+    // Registration can still proceed; uninstall will fall back to targeted cleanup.
+  }
 }
 
 function findCommand(command) {

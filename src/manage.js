@@ -36,6 +36,7 @@ const COMMANDS = [
   { id: 8, group: "system", usage: "mvb 8", textKey: "cmdConfig" },
   { id: 9, group: "common", usage: "mvb 9", textKey: "cmdHelp" },
   { id: 10, group: "client", usage: "mvb 10", textKey: "cmdClient" },
+  { id: 11, group: "system", usage: "mvb 11", textKey: "cmdUninstall" },
 ];
 
 const COMMAND_GROUPS = ["vision", "model", "system", "client", "common"];
@@ -88,6 +89,7 @@ const TEXT = {
     aliasToggle: "mvb on/off/status   开关或查看识图状态",
     aliasSwitchNo: "mvb switch 2        切换到第 2 个配置",
     aliasSwitchId: "mvb switch <id>     按配置 ID 切换",
+    aliasUninstall: "mvb uninstall      卸载前还原/清理客户端配置",
     groupVision: "识图开关",
     groupModel: "模型管理",
     groupSystem: "系统维护",
@@ -99,10 +101,11 @@ const TEXT = {
     cmdProfiles: "查看已配置的模型列表",
     cmdSwitch: "切换当前使用的视觉模型或套餐",
     cmdDoctor: "运行环境和配置诊断",
-    cmdInit: "重新运行安装向导",
+    cmdInit: "重新运行安装向导，追加模型配置",
     cmdConfig: "查看配置、数据和日志路径",
     cmdHelp: "显示命令用法",
     cmdClient: "打印 MCP 客户端注册片段",
+    cmdUninstall: "卸载前还原/清理客户端配置",
   },
   en: {
     dashboardTitle: "MCP Vision Bridge Management",
@@ -151,6 +154,7 @@ const TEXT = {
     aliasToggle: "mvb on/off/status   Toggle or view vision switch",
     aliasSwitchNo: "mvb switch 2        Switch to profile #2",
     aliasSwitchId: "mvb switch <id>     Switch to profile id",
+    aliasUninstall: "mvb uninstall      Restore/clean client config before uninstall",
     groupVision: "Vision Switch",
     groupModel: "Model Management",
     groupSystem: "System",
@@ -162,10 +166,11 @@ const TEXT = {
     cmdProfiles: "Show configured model profiles",
     cmdSwitch: "Switch active vision model/profile",
     cmdDoctor: "Run environment and config diagnostics",
-    cmdInit: "Run setup wizard again",
+    cmdInit: "Run setup wizard again and append profiles",
     cmdConfig: "Print config path and local data paths",
     cmdHelp: "Show command usage",
     cmdClient: "Print MCP client registration snippets",
+    cmdUninstall: "Restore/clean client config before uninstall",
   },
 };
 
@@ -193,6 +198,9 @@ const ALIASES = new Map([
   ["h", 9],
   ["client", 10],
   ["mcp", 10],
+  ["uninstall", 11],
+  ["cleanup", 11],
+  ["remove", 11],
   ["状态", 1],
   ["面板", 1],
   ["开启", 2],
@@ -208,6 +216,9 @@ const ALIASES = new Map([
   ["配置", 8],
   ["路径", 8],
   ["帮助", 9],
+  ["卸载", 11],
+  ["清理", 11],
+  ["还原", 11],
 ]);
 
 main();
@@ -249,6 +260,9 @@ function main() {
     case 10:
       renderClientSnippets(loadConfigOrNull());
       return;
+    case 11:
+      runScript("uninstall.js", args.slice(1));
+      return;
     default:
       {
         const config = loadConfigOrNull();
@@ -280,10 +294,10 @@ function renderProfilesPage(config) {
 }
 
 function printBanner(t, width) {
-  printBox([
-    color(t.dashboardTitle, "bold"),
-    color(t.subtitle, "dim"),
-  ], { width, title: "MVB" });
+  console.log("");
+  console.log(`${color("✻", "cyan")} ${color(t.dashboardTitle, "bold")}`);
+  console.log(`  ${color(t.subtitle, "dim")}`);
+  console.log(color("─".repeat(Math.min(width, 92)), "dim"));
 }
 
 function printOverview(config, t, width) {
@@ -299,22 +313,22 @@ function printOverview(config, t, width) {
     formatField(t.endpoint, provider.baseUrl || "(not set)"),
     formatField(t.config, defaultConfigPath()),
   ];
-  printBox(lines, { width, title: t.overview });
+  printSection(t.overview, lines, width);
 }
 
 function printQuickActions(t, width) {
   const lines = [
-    `${commandNo(2)} mvb 2      ${t.quickOn}`,
-    `${commandNo(3)} mvb 3      ${t.quickOff}`,
-    `${commandNo(5)} mvb 5 2    ${t.quickSwitch}`,
+    `${commandNo(2, 2)} ${"mvb 2".padEnd(14)} ${t.quickOn}`,
+    `${commandNo(3, 2)} ${"mvb 3".padEnd(14)} ${t.quickOff}`,
+    `${commandNo(5, 2)} ${"mvb 5 2".padEnd(14)} ${t.quickSwitch}`,
   ];
-  printBox(lines, { width, title: t.quickActions });
+  printSection(t.quickActions, lines, width);
 }
 
 function renderProfiles(config, t = textFor(config), width = terminalWidth(), options = {}) {
   const profiles = listProfiles(config);
   if (!profiles.length) {
-    printBox([t.noProfiles], { width, title: t.profilesTitle });
+    printSection(t.profilesTitle, [t.noProfiles], width);
     return;
   }
 
@@ -331,7 +345,7 @@ function renderProfiles(config, t = textFor(config), width = terminalWidth(), op
   }
   lines.push("");
   lines.push(t.switchModelHint);
-  printBox(lines, { width, title: t.profilesTitle });
+  printSection(t.profilesTitle, lines, width);
 }
 
 function renderCommands(t = TEXT.en, width = terminalWidth()) {
@@ -340,36 +354,37 @@ function renderCommands(t = TEXT.en, width = terminalWidth()) {
     const commands = COMMANDS.filter((command) => command.group === group);
     if (!commands.length) continue;
     if (lines.length) lines.push("");
-    lines.push(`[${groupTitle(group, t)}]`);
+    lines.push(color(groupTitle(group, t), "cyan"));
     for (const command of commands) {
       lines.push(formatCommand(command, t));
     }
   }
-  printBox(lines, { width, title: t.commandsTitle });
+  printSection(t.commandsTitle, lines, width);
 }
 
 function renderHelp(config = null) {
   const t = textFor(config);
   const width = terminalWidth();
   renderCommands(t, width);
-  printBox([
+  printSection(t.aliases, [
     t.aliasDashboard,
     t.aliasToggle,
     t.aliasSwitchNo,
     t.aliasSwitchId,
-  ], { width, title: t.aliases });
+    t.aliasUninstall,
+  ], width);
 }
 
 function renderConfigPaths(config) {
   const t = textFor(config);
   const width = terminalWidth();
-  printBox([
+  printSection(t.pathsTitle, [
     formatField(t.config, defaultConfigPath()),
     formatField(t.dataDir, config.dataDir || ""),
     formatField(t.logDir, config.logging?.dir || ""),
     formatField(t.activeProfile, config.activeProfile || "default"),
     formatField(t.visionSwitch, isVisionEnabled(config) ? "ON" : "OFF"),
-  ], { width, title: t.pathsTitle });
+  ], width);
 }
 
 function renderClientSnippets(config = null) {
@@ -400,7 +415,7 @@ function renderClientSnippets(config = null) {
     "  \"vision_image_to_markdown\"",
     "]",
   ].map((line) => `  ${line}`);
-  printBox([
+  printSection(t.clientTitle, [
     `${t.claudeCode}:`,
     "  claude mcp add --scope user vision-bridge -- mcp-vision-bridge",
     "",
@@ -409,7 +424,7 @@ function renderClientSnippets(config = null) {
     "",
     `${t.genericJson}:`,
     ...genericJson,
-  ], { width, title: t.clientTitle });
+  ], width);
 }
 
 function setVisionSwitch(enabled) {
@@ -417,11 +432,11 @@ function setVisionSwitch(enabled) {
   const t = textFor(config);
   const next = setVisionEnabled(config, enabled);
   const configPath = saveConfig(next);
-  printBox([
+  printSection(t.visionSwitch, [
     enabled ? t.switchSavedOn : t.switchSavedOff,
     enabled ? t.onDetail : t.offDetail,
     `${t.saved}: ${configPath}`,
-  ], { width: terminalWidth(), title: t.visionSwitch });
+  ], terminalWidth());
 }
 
 function switchProfile(target) {
@@ -447,13 +462,13 @@ function switchProfile(target) {
   const next = switchActiveProfile(config, profileId);
   const configPath = saveConfig(next);
   const provider = next.provider || {};
-  printBox([
+  printSection(t.profilesTitle, [
     `${t.switched}: ${profileId}`,
     `${t.model}: ${provider.model || ""}`,
     `${t.provider}: ${provider.name || ""} / ${provider.plan || "custom"} / ${provider.type || ""}`,
     `${t.endpoint}: ${provider.baseUrl || ""}`,
     `${t.saved}: ${configPath}`,
-  ], { width: terminalWidth(), title: t.profilesTitle });
+  ], terminalWidth());
 }
 
 function resolveProfileId(target, profiles) {
@@ -490,9 +505,9 @@ function loadConfigOrNull() {
   }
 }
 
-function runScript(scriptName) {
+function runScript(scriptName, scriptArgs = []) {
   const scriptPath = path.join(SCRIPT_DIR, scriptName);
-  const result = spawnSync(process.execPath, [scriptPath], {
+  const result = spawnSync(process.execPath, [scriptPath, ...scriptArgs], {
     cwd: process.cwd(),
     env: process.env,
     stdio: "inherit",
@@ -501,15 +516,17 @@ function runScript(scriptName) {
   process.exitCode = result.status ?? 1;
 }
 
-function printBox(lines, { width, title }) {
-  const innerWidth = width - 4;
-  const titleText = title ? ` ${title} ` : "";
-  const topFill = Math.max(0, width - displayLength(titleText) - 2);
-  console.log(`+${titleText}${"-".repeat(topFill)}+`);
+function printSection(title, lines, width = terminalWidth()) {
+  const innerWidth = Math.max(20, width - 4);
+  console.log("");
+  console.log(`${color("›", "cyan")} ${color(title, "bold")}`);
   for (const line of normalizeLines(lines, innerWidth)) {
-    console.log(`| ${padDisplay(line, innerWidth)} |`);
+    if (!line) {
+      console.log("");
+      continue;
+    }
+    console.log(`  ${line}`);
   }
-  console.log(`+${"-".repeat(width - 2)}+`);
 }
 
 function normalizeLines(lines, width) {
@@ -564,7 +581,7 @@ function formatCommand(command, t) {
 
 function groupTitle(group, t) {
   const key = `group${group[0].toUpperCase()}${group.slice(1)}`;
-  return color(t[key] || group, "cyan");
+  return t[key] || group;
 }
 
 function terminalWidth() {

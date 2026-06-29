@@ -16,17 +16,19 @@
     "mcp-vision-bridge": "./src/server.js",
     "mcp-vision-bridge-init": "./src/init-config.js",
     "mcp-vision-bridge-doctor": "./src/doctor.js",
+    "mcp-vision-bridge-uninstall": "./src/uninstall.js",
     "mcp-vision-bridge-vision": "./src/toggle-vision.js",
     "claude-vision-mcp": "./src/server.js",
     "claude-vision-mcp-init": "./src/init-config.js",
     "claude-vision-mcp-doctor": "./src/doctor.js",
+    "claude-vision-mcp-uninstall": "./src/uninstall.js",
     "claude-vision-mcp-vision": "./src/toggle-vision.js"
   },
   "scripts": {
     "start": "node src/server.js",
     "init": "node src/init-config.js",
     "doctor": "node src/doctor.js",
-    "check": "node --check src/server.js && node --check src/init-config.js && node --check src/doctor.js && node --check src/attachment-discovery.js && node --check src/audit-log.js && node --check src/claude-code-images.js && node --check src/clipboard-image.js && node --check src/config.js && node --check src/image-preprocess.js && node --check src/image-store.js && node --check src/manage.js && node --check src/privacy.js && node --check src/prompts.js && node --check src/tools.js && node --check src/toggle-vision.js && node --check src/vision-client.js"
+    "check": "node --check src/server.js && node --check src/init-config.js && node --check src/doctor.js && node --check src/uninstall.js && node --check src/attachment-discovery.js && node --check src/audit-log.js && node --check src/claude-code-images.js && node --check src/clipboard-image.js && node --check src/config.js && node --check src/image-preprocess.js && node --check src/image-store.js && node --check src/manage.js && node --check src/privacy.js && node --check src/prompts.js && node --check src/tools.js && node --check src/toggle-vision.js && node --check src/vision-client.js"
   },
   "engines": {
     "node": ">=20"

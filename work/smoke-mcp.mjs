@@ -171,6 +171,14 @@ send({
 send({
   jsonrpc: "2.0",
   id: 10,
+  method: "prompts/get",
+  params: {
+    name: "reasonix-autovision",
+  },
+});
+send({
+  jsonrpc: "2.0",
+  id: 11,
   method: "tools/call",
   params: {
     name: "vision_status",
@@ -179,7 +187,7 @@ send({
 });
 send({
   jsonrpc: "2.0",
-  id: 11,
+  id: 12,
   method: "tools/call",
   params: {
     name: "vision_set_enabled",
@@ -190,7 +198,7 @@ send({
 });
 send({
   jsonrpc: "2.0",
-  id: 12,
+  id: 13,
   method: "tools/call",
   params: {
     name: "vision_list_recent_images",
@@ -202,7 +210,7 @@ send({
 });
 send({
   jsonrpc: "2.0",
-  id: 13,
+  id: 14,
   method: "tools/call",
   params: {
     name: "vision_set_enabled",
@@ -213,7 +221,7 @@ send({
 });
 send({
   jsonrpc: "2.0",
-  id: 14,
+  id: 15,
   method: "tools/call",
   params: {
     name: "vision_status",
@@ -240,11 +248,12 @@ child.on("exit", () => {
   const profileSwitch = responses.find((r) => r.id === 7);
   const promptList = responses.find((r) => r.id === 8);
   const promptGet = responses.find((r) => r.id === 9);
-  const visionStatus = responses.find((r) => r.id === 10);
-  const visionDisable = responses.find((r) => r.id === 11);
-  const disabledRecentImages = responses.find((r) => r.id === 12);
-  const visionEnable = responses.find((r) => r.id === 13);
-  const finalVisionStatus = responses.find((r) => r.id === 14);
+  const reasonixPromptGet = responses.find((r) => r.id === 10);
+  const visionStatus = responses.find((r) => r.id === 11);
+  const visionDisable = responses.find((r) => r.id === 12);
+  const disabledRecentImages = responses.find((r) => r.id === 13);
+  const visionEnable = responses.find((r) => r.id === 14);
+  const finalVisionStatus = responses.find((r) => r.id === 15);
   if (!init?.result?.serverInfo?.name) {
     console.error("Missing initialize response");
     console.error({ responses, stderr });
@@ -274,6 +283,18 @@ child.on("exit", () => {
   if (!toolNames.includes("vision_status") || !toolNames.includes("vision_set_enabled")) {
     console.error("Missing vision switch tools");
     console.error({ responses, stderr });
+    process.exit(1);
+  }
+  const analyzeAttachmentTool = tools.result.tools.find((tool) => tool.name === "vision_analyze_attachment");
+  if (analyzeAttachmentTool?.annotations?.readOnlyHint !== true) {
+    console.error("Missing read-only annotation on vision_analyze_attachment");
+    console.error({ analyzeAttachmentTool, responses, stderr });
+    process.exit(1);
+  }
+  const switchProfileTool = tools.result.tools.find((tool) => tool.name === "vision_switch_profile");
+  if (switchProfileTool?.annotations?.readOnlyHint !== false) {
+    console.error("Missing mutation annotation on vision_switch_profile");
+    console.error({ switchProfileTool, responses, stderr });
     process.exit(1);
   }
   if (!register?.result?.content?.[0]?.text?.includes("img_")) {
@@ -322,8 +343,18 @@ child.on("exit", () => {
     console.error({ responses, stderr });
     process.exit(1);
   }
+  if (!promptList?.result?.prompts?.some((prompt) => prompt.name === "reasonix-autovision")) {
+    console.error("Missing reasonix-autovision prompt");
+    console.error({ responses, stderr });
+    process.exit(1);
+  }
   if (!promptGet?.result?.messages?.[0]?.content?.text?.includes("vision_analyze_screenshot")) {
     console.error("Missing autovision prompt content");
+    console.error({ responses, stderr });
+    process.exit(1);
+  }
+  if (!reasonixPromptGet?.result?.messages?.[0]?.content?.text?.includes("%APPDATA%\\reasonix\\config.toml")) {
+    console.error("Missing Reasonix prompt config guidance");
     console.error({ responses, stderr });
     process.exit(1);
   }

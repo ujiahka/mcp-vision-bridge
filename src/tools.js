@@ -25,6 +25,44 @@ const CONTROL_TOOL_NAMES = new Set([
   "vision_switch_profile",
 ]);
 
+const LOCAL_READ_ONLY_ANNOTATION = {
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: false,
+};
+
+const VISION_READ_ANNOTATION = {
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: false,
+  openWorldHint: true,
+};
+
+const LOCAL_MUTATION_ANNOTATION = {
+  readOnlyHint: false,
+  destructiveHint: false,
+  idempotentHint: false,
+  openWorldHint: false,
+};
+
+const TOOL_ANNOTATIONS = {
+  vision_status: LOCAL_READ_ONLY_ANNOTATION,
+  vision_list_profiles: LOCAL_READ_ONLY_ANNOTATION,
+  vision_list_recent_images: LOCAL_READ_ONLY_ANNOTATION,
+  vision_set_enabled: LOCAL_MUTATION_ANNOTATION,
+  vision_switch_profile: LOCAL_MUTATION_ANNOTATION,
+  vision_register_image: LOCAL_MUTATION_ANNOTATION,
+  vision_probe: VISION_READ_ANNOTATION,
+  vision_analyze_attachment: VISION_READ_ANNOTATION,
+  vision_analyze_screenshot: VISION_READ_ANNOTATION,
+  vision_describe_image: VISION_READ_ANNOTATION,
+  vision_ask_image: VISION_READ_ANNOTATION,
+  vision_ocr_image: VISION_READ_ANNOTATION,
+  vision_image_to_markdown: VISION_READ_ANNOTATION,
+  vision_analyze_region: VISION_READ_ANNOTATION,
+};
+
 export function listTools() {
   return [
     {
@@ -194,7 +232,12 @@ export function listTools() {
         required: ["bbox"],
       },
     },
-  ];
+  ].map(withAnnotations);
+}
+
+function withAnnotations(tool) {
+  const annotations = TOOL_ANNOTATIONS[tool.name];
+  return annotations ? { ...tool, annotations } : tool;
 }
 
 export async function callTool(name, args, config) {

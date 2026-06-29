@@ -73,6 +73,7 @@ const TEXT = {
     logDir: "日志目录",
     clientTitle: "MCP 客户端配置片段",
     claudeCode: "Claude Code",
+    reasonix: "Reasonix（%APPDATA%\\reasonix\\config.toml）",
     genericJson: "通用 MCP JSON",
     switchSavedOn: "MCP 识图已开启。",
     switchSavedOff: "MCP 识图已关闭。",
@@ -135,6 +136,7 @@ const TEXT = {
     logDir: "Log dir",
     clientTitle: "MCP Client Snippets",
     claudeCode: "Claude Code",
+    reasonix: "Reasonix (%APPDATA%\\reasonix\\config.toml)",
     genericJson: "Generic MCP JSON",
     switchSavedOn: "Vision switch: ON",
     switchSavedOff: "Vision switch: OFF",
@@ -373,19 +375,40 @@ function renderConfigPaths(config) {
 function renderClientSnippets(config = null) {
   const t = textFor(config);
   const width = terminalWidth();
+  const genericJson = JSON.stringify({
+    mcpServers: {
+      "vision-bridge": {
+        command: "mcp-vision-bridge",
+        args: [],
+      },
+    },
+  }, null, 2).split("\n").map((line) => `  ${line}`);
+  const reasonixToml = [
+    "[[plugins]]",
+    "name = \"vision-bridge\"",
+    "type = \"stdio\"",
+    "command = \"mcp-vision-bridge\"",
+    "trusted_read_only_tools = [",
+    "  \"vision_status\",",
+    "  \"vision_list_profiles\",",
+    "  \"vision_list_recent_images\",",
+    "  \"vision_analyze_attachment\",",
+    "  \"vision_analyze_screenshot\",",
+    "  \"vision_describe_image\",",
+    "  \"vision_ask_image\",",
+    "  \"vision_ocr_image\",",
+    "  \"vision_image_to_markdown\"",
+    "]",
+  ].map((line) => `  ${line}`);
   printBox([
     `${t.claudeCode}:`,
     "  claude mcp add --scope user vision-bridge -- mcp-vision-bridge",
     "",
+    `${t.reasonix}:`,
+    ...reasonixToml,
+    "",
     `${t.genericJson}:`,
-    JSON.stringify({
-      mcpServers: {
-        "vision-bridge": {
-          command: "mcp-vision-bridge",
-          args: [],
-        },
-      },
-    }, null, 2),
+    ...genericJson,
   ], { width, title: t.clientTitle });
 }
 

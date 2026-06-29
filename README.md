@@ -277,6 +277,46 @@ claude mcp list
 }
 ```
 
+### 8.4 Reasonix 当前版本配置
+
+Reasonix 当前版本的全局配置文件通常位于：
+
+```text
+%APPDATA%\reasonix\config.toml
+```
+
+在文件末尾添加或更新：
+
+```toml
+[[plugins]]
+name = "vision-bridge"
+type = "stdio"
+command = "mcp-vision-bridge"
+trusted_read_only_tools = [
+  "vision_status",
+  "vision_list_profiles",
+  "vision_list_recent_images",
+  "vision_analyze_attachment",
+  "vision_analyze_screenshot",
+  "vision_describe_image",
+  "vision_ask_image",
+  "vision_ocr_image",
+  "vision_image_to_markdown"
+]
+```
+
+Windows 如果无法解析全局 npm 命令，可把 `command` 改为 npm shim 绝对路径：
+
+```toml
+command = "C:\\Users\\YOUR_NAME\\AppData\\Roaming\\npm\\mcp-vision-bridge.cmd"
+```
+
+更完整的 Reasonix 自动识图规则见：
+
+```text
+rules/reasonix-autovision.md
+```
+
 ## 9. 终端管理页
 
 安装后可以直接运行：
@@ -357,6 +397,7 @@ MCP server 不能强制宿主模型调用工具。要接近“无感识图”，
 
 ```text
 rules/single-modal-autovision.md
+rules/reasonix-autovision.md
 ```
 
 最小规则示例：
@@ -592,6 +633,20 @@ mvb 7
 ```text
 <dataDir>/logs/vision-YYYY-MM-DD.jsonl
 ```
+
+如果在 Reasonix 或其他文本模型客户端中看到类似错误：
+
+```text
+unknown variant image_url, expected text
+```
+
+通常表示客户端把图片块直接发给了文本模型，而不是先通过 MCP 识图。处理方式：
+
+1. 确认 Reasonix 的 `%APPDATA%\reasonix\config.toml` 使用 `[[plugins]]` 注册了 `vision-bridge`。
+2. 把 `vision_analyze_attachment`、`vision_analyze_screenshot`、`vision_describe_image`、`vision_ask_image`、`vision_ocr_image`、`vision_image_to_markdown` 加入 `trusted_read_only_tools`。
+3. 在 Reasonix 全局规则或项目规则中加入 `rules/reasonix-autovision.md` 的自动识图指令。
+4. 对单模态模型，尽量让模型先调用 `mcp__vision-bridge__vision_analyze_attachment`，不要把图片块直接发送给主模型。
+5. 如果客户端仍先把附件发给文本模型，请改用剪贴板、本地绝对路径或图片 URL 触发 MCP 识图。
 
 ### 16.4 一直转圈，进度不变
 
@@ -1045,6 +1100,46 @@ If command resolution fails on Windows, use the absolute npm shim path:
 }
 ```
 
+### 8.4 Current Reasonix Configuration
+
+Current Reasonix builds usually read the global configuration from:
+
+```text
+%APPDATA%\reasonix\config.toml
+```
+
+Add or update this block:
+
+```toml
+[[plugins]]
+name = "vision-bridge"
+type = "stdio"
+command = "mcp-vision-bridge"
+trusted_read_only_tools = [
+  "vision_status",
+  "vision_list_profiles",
+  "vision_list_recent_images",
+  "vision_analyze_attachment",
+  "vision_analyze_screenshot",
+  "vision_describe_image",
+  "vision_ask_image",
+  "vision_ocr_image",
+  "vision_image_to_markdown"
+]
+```
+
+If Windows cannot resolve the global npm command, use the absolute npm shim path:
+
+```toml
+command = "C:\\Users\\YOUR_NAME\\AppData\\Roaming\\npm\\mcp-vision-bridge.cmd"
+```
+
+The Reasonix-specific automatic routing rule is:
+
+```text
+rules/reasonix-autovision.md
+```
+
 ## 9. Terminal Management Console
 
 Run:
@@ -1114,6 +1209,7 @@ MCP servers cannot force host models to call tools. To make image use feel seaml
 
 ```text
 rules/single-modal-autovision.md
+rules/reasonix-autovision.md
 ```
 
 Minimal rule:
@@ -1246,6 +1342,20 @@ mvb 7
 ```
 
 Use `vision_probe` to verify image support.
+
+If Reasonix or another text-only client returns an error like:
+
+```text
+unknown variant image_url, expected text
+```
+
+the client likely sent image blocks directly to a text-only host model instead of routing the image through MCP first. To fix it:
+
+1. Confirm `%APPDATA%\reasonix\config.toml` registers `vision-bridge` with `[[plugins]]`.
+2. Add `vision_analyze_attachment`, `vision_analyze_screenshot`, `vision_describe_image`, `vision_ask_image`, `vision_ocr_image`, and `vision_image_to_markdown` to `trusted_read_only_tools`.
+3. Add the routing rule from `rules/reasonix-autovision.md` to Reasonix global or project instructions.
+4. For text-only models, route image requests through `mcp__vision-bridge__vision_analyze_attachment` before answering.
+5. If the client still sends attachments directly to the text-only model first, use clipboard fallback, an explicit local path, or an image URL for MCP vision.
 
 ### 15.3 Request Hangs Or Progress Does Not Move
 

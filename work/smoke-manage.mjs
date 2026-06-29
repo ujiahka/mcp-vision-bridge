@@ -59,7 +59,7 @@ assertConfig((config) => config.activeProfile === "second-api", "active profile 
 run(["5", "first-local"], ["Active profile switched: first-local", "qwen/qwen3-vl-8b"]);
 assertConfig((config) => config.activeProfile === "first-local", "active profile should be first-local");
 run(["8"], ["Paths", "Config", "Data dir"]);
-run(["10"], ["claude mcp add", "mcpServers"]);
+run(["10"], ["claude mcp add", "[[plugins]]", "trusted_read_only_tools", "vision_analyze_attachment", "mcpServers"]);
 
 updateConfig((config) => {
   config.language = "zh";

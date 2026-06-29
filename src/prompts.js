@@ -5,6 +5,11 @@ const AUTOVISION_PROMPT = {
   description: "Rules for text-only agents to call mcp-vision-bridge automatically for image, screenshot, OCR, and visual QA tasks.",
 };
 
+const REASONIX_PROMPT = {
+  name: "reasonix-autovision",
+  description: "Reasonix-specific rules and config guidance for automatic MCP image understanding with text-only models.",
+};
+
 const FALLBACK_AUTOVISION_RULE = `# Single-modal Auto Vision Rule
 
 Use this rule when the active chat model is text-only and image understanding must be handled by mcp-vision-bridge.
@@ -18,18 +23,50 @@ Use vision_analyze_screenshot immediately after Playwright, webapp-testing, brow
 Use vision_ocr_image for OCR, vision_image_to_markdown for document/table/chart/page screenshots, vision_ask_image for specific questions, and vision_register_image for repeated multi-turn image analysis.
 `;
 
+const FALLBACK_REASONIX_RULE = `# Reasonix Auto Vision Rule
+
+Use this rule in Reasonix when the active model is text-only and images should be handled by mcp-vision-bridge.
+
+Register the MCP server in %APPDATA%\\reasonix\\config.toml:
+
+[[plugins]]
+name = "vision-bridge"
+type = "stdio"
+command = "mcp-vision-bridge"
+trusted_read_only_tools = [
+  "vision_status",
+  "vision_list_profiles",
+  "vision_list_recent_images",
+  "vision_analyze_attachment",
+  "vision_analyze_screenshot",
+  "vision_describe_image",
+  "vision_ask_image",
+  "vision_ocr_image",
+  "vision_image_to_markdown"
+]
+
+When the user uploads, pastes, or refers to an image with phrases such as 上图, 参考图, 图1, 图2, screenshot, attached image, or the image above, call mcp__vision-bridge__vision_analyze_attachment before answering. If direct upload to the host model causes provider HTTP 400, avoid sending image blocks to the text-only model and use MCP attachment discovery, clipboard fallback, local path, or URL instead.
+`;
+
 export function listPrompts() {
-  return [AUTOVISION_PROMPT];
+  return [AUTOVISION_PROMPT, REASONIX_PROMPT];
 }
 
 export function getPrompt(name) {
-  if (name !== AUTOVISION_PROMPT.name) {
-    throw new Error(`Unknown prompt: ${name}`);
+  if (name === AUTOVISION_PROMPT.name) {
+    return promptResult(AUTOVISION_PROMPT, readRule("../rules/single-modal-autovision.md", FALLBACK_AUTOVISION_RULE));
   }
 
-  const text = readAutoVisionRule();
+  if (name === REASONIX_PROMPT.name) {
+    return promptResult(REASONIX_PROMPT, readRule("../rules/reasonix-autovision.md", FALLBACK_REASONIX_RULE));
+  }
+
+  throw new Error(`Unknown prompt: ${name}`);
+}
+
+function promptResult(prompt, text) {
   return {
-    description: AUTOVISION_PROMPT.description,
+    description: prompt.description,
     messages: [
       {
         role: "user",
@@ -42,10 +79,10 @@ export function getPrompt(name) {
   };
 }
 
-function readAutoVisionRule() {
+function readRule(rulePath, fallback) {
   try {
-    return fs.readFileSync(new URL("../rules/single-modal-autovision.md", import.meta.url), "utf8");
+    return fs.readFileSync(new URL(rulePath, import.meta.url), "utf8");
   } catch {
-    return FALLBACK_AUTOVISION_RULE;
+    return fallback;
   }
 }

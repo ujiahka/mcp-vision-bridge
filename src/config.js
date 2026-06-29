@@ -49,6 +49,9 @@ export function baseConfig() {
       model: "",
       apiKey: "",
     },
+    vision: {
+      enabled: true,
+    },
     activeProfile: "default",
     profiles: {},
     privacy: {
@@ -85,12 +88,20 @@ export function baseConfig() {
       maxDepth: 5,
       maxCandidates: 200,
       includeMagicByteScan: true,
+      clipboardFallback: true,
+      claudeCodeFallback: true,
+      claudeCodeDirs: [],
+      maxClaudeCodeSessionFiles: 12,
+      maxClaudeCodeLinesPerFile: 400,
+      maxClaudeCodeImages: 20,
+      maxClaudeCodeAutoSelectAgeSeconds: 600,
     },
   };
 }
 
 export function applyEnvOverrides(config) {
   const next = structuredClone(config);
+  if (process.env.VISION_MCP_ENABLED) next.vision.enabled = parseBool(process.env.VISION_MCP_ENABLED);
   if (process.env.VISION_BASE_URL) next.provider.baseUrl = process.env.VISION_BASE_URL;
   if (process.env.VISION_MODEL) next.provider.model = process.env.VISION_MODEL;
   if (process.env.VISION_API_KEY) next.provider.apiKey = process.env.VISION_API_KEY;
@@ -105,6 +116,13 @@ export function applyEnvOverrides(config) {
   if (process.env.VISION_ATTACHMENT_DIRS) next.attachments.searchDirs = process.env.VISION_ATTACHMENT_DIRS.split(path.delimiter).filter(Boolean);
   if (process.env.VISION_ATTACHMENT_MAX_AGE_MINUTES) next.attachments.maxAgeMinutes = Number(process.env.VISION_ATTACHMENT_MAX_AGE_MINUTES);
   if (process.env.VISION_ATTACHMENT_MAX_AUTO_SELECT_AGE_SECONDS) next.attachments.maxAutoSelectAgeSeconds = Number(process.env.VISION_ATTACHMENT_MAX_AUTO_SELECT_AGE_SECONDS);
+  if (process.env.VISION_ATTACHMENT_CLIPBOARD_FALLBACK) next.attachments.clipboardFallback = parseBool(process.env.VISION_ATTACHMENT_CLIPBOARD_FALLBACK);
+  if (process.env.VISION_ATTACHMENT_CLAUDE_CODE_FALLBACK) next.attachments.claudeCodeFallback = parseBool(process.env.VISION_ATTACHMENT_CLAUDE_CODE_FALLBACK);
+  if (process.env.VISION_ATTACHMENT_CLAUDE_CODE_DIRS) next.attachments.claudeCodeDirs = process.env.VISION_ATTACHMENT_CLAUDE_CODE_DIRS.split(path.delimiter).filter(Boolean);
+  if (process.env.VISION_ATTACHMENT_MAX_CLAUDE_CODE_SESSION_FILES) next.attachments.maxClaudeCodeSessionFiles = Number(process.env.VISION_ATTACHMENT_MAX_CLAUDE_CODE_SESSION_FILES);
+  if (process.env.VISION_ATTACHMENT_MAX_CLAUDE_CODE_LINES_PER_FILE) next.attachments.maxClaudeCodeLinesPerFile = Number(process.env.VISION_ATTACHMENT_MAX_CLAUDE_CODE_LINES_PER_FILE);
+  if (process.env.VISION_ATTACHMENT_MAX_CLAUDE_CODE_IMAGES) next.attachments.maxClaudeCodeImages = Number(process.env.VISION_ATTACHMENT_MAX_CLAUDE_CODE_IMAGES);
+  if (process.env.VISION_ATTACHMENT_MAX_CLAUDE_CODE_AUTO_SELECT_AGE_SECONDS) next.attachments.maxClaudeCodeAutoSelectAgeSeconds = Number(process.env.VISION_ATTACHMENT_MAX_CLAUDE_CODE_AUTO_SELECT_AGE_SECONDS);
   if (process.env.VISION_MCP_DATA_DIR) {
     next.dataDir = process.env.VISION_MCP_DATA_DIR;
     if (!process.env.VISION_MCP_LOG_DIR) next.logging.dir = path.join(next.dataDir, "logs");
@@ -200,6 +218,7 @@ function mergeConfig(base, override) {
     ...base,
     ...override,
     provider: { ...base.provider, ...(override.provider || {}) },
+    vision: { ...base.vision, ...(override.vision || {}) },
     privacy: { ...base.privacy, ...(override.privacy || {}) },
     logging: { ...base.logging, ...(override.logging || {}) },
     limits: { ...base.limits, ...(override.limits || {}) },
@@ -215,6 +234,19 @@ function mergeConfig(base, override) {
 
 function parseBool(value) {
   return ["1", "true", "yes", "on"].includes(String(value).toLowerCase());
+}
+
+export function isVisionEnabled(config) {
+  return config?.vision?.enabled !== false;
+}
+
+export function setVisionEnabled(config, enabled) {
+  const next = structuredClone(config || baseConfig());
+  next.vision = {
+    ...(next.vision || {}),
+    enabled: Boolean(enabled),
+  };
+  return next;
 }
 
 function mergeProfiles(baseProfiles, overrideProfiles) {

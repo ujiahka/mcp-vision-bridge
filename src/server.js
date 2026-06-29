@@ -109,6 +109,7 @@ async function dispatch(method, params) {
     case "tools/list":
       return { tools: listTools() };
     case "tools/call":
+      reloadConfig();
       if (!config) {
         throw new Error(`${configError?.message || "Server is not configured."} Run mcp-vision-bridge-init before calling vision tools.`);
       }
@@ -126,6 +127,16 @@ async function dispatch(method, params) {
       return getPrompt(params.name);
     default:
       throw new Error(`Unsupported method: ${method}`);
+  }
+}
+
+function reloadConfig() {
+  try {
+    config = loadConfig();
+    configError = null;
+  } catch (err) {
+    configError = err;
+    config = null;
   }
 }
 

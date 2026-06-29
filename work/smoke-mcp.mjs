@@ -64,6 +64,9 @@ fs.writeFileSync(configPath, JSON.stringify({
     maxTokens: 2048,
     requestTimeoutMs: 120000,
   },
+  attachments: {
+    clipboardFallback: false,
+  },
 }, null, 2));
 
 const child = spawn(process.execPath, [path.join(root, "src", "server.js")], {
@@ -165,6 +168,58 @@ send({
     name: "single-modal-autovision",
   },
 });
+send({
+  jsonrpc: "2.0",
+  id: 10,
+  method: "tools/call",
+  params: {
+    name: "vision_status",
+    arguments: {},
+  },
+});
+send({
+  jsonrpc: "2.0",
+  id: 11,
+  method: "tools/call",
+  params: {
+    name: "vision_set_enabled",
+    arguments: {
+      enabled: false,
+    },
+  },
+});
+send({
+  jsonrpc: "2.0",
+  id: 12,
+  method: "tools/call",
+  params: {
+    name: "vision_list_recent_images",
+    arguments: {
+      attachment_hint: "recent-attachment.png 1x1",
+      max_results: 3,
+    },
+  },
+});
+send({
+  jsonrpc: "2.0",
+  id: 13,
+  method: "tools/call",
+  params: {
+    name: "vision_set_enabled",
+    arguments: {
+      enabled: true,
+    },
+  },
+});
+send({
+  jsonrpc: "2.0",
+  id: 14,
+  method: "tools/call",
+  params: {
+    name: "vision_status",
+    arguments: {},
+  },
+});
 
 setTimeout(() => {
   child.kill();
@@ -185,6 +240,11 @@ child.on("exit", () => {
   const profileSwitch = responses.find((r) => r.id === 7);
   const promptList = responses.find((r) => r.id === 8);
   const promptGet = responses.find((r) => r.id === 9);
+  const visionStatus = responses.find((r) => r.id === 10);
+  const visionDisable = responses.find((r) => r.id === 11);
+  const disabledRecentImages = responses.find((r) => r.id === 12);
+  const visionEnable = responses.find((r) => r.id === 13);
+  const finalVisionStatus = responses.find((r) => r.id === 14);
   if (!init?.result?.serverInfo?.name) {
     console.error("Missing initialize response");
     console.error({ responses, stderr });
@@ -211,6 +271,11 @@ child.on("exit", () => {
     console.error({ responses, stderr });
     process.exit(1);
   }
+  if (!toolNames.includes("vision_status") || !toolNames.includes("vision_set_enabled")) {
+    console.error("Missing vision switch tools");
+    console.error({ responses, stderr });
+    process.exit(1);
+  }
   if (!register?.result?.content?.[0]?.text?.includes("img_")) {
     console.error("Missing vision_register_image response");
     console.error({ responses, stderr });
@@ -224,6 +289,17 @@ child.on("exit", () => {
   if (!recentImages.result.content[0].text.includes("autoSelectable")) {
     console.error("Missing attachment auto-selectability metadata");
     console.error({ responses, stderr });
+    process.exit(1);
+  }
+  const recentImagesPayload = JSON.parse(recentImages.result.content[0].text);
+  if (recentImagesPayload.status !== "ready_for_analysis") {
+    console.error("Missing ready_for_analysis next-step status");
+    console.error({ recentImagesPayload, responses, stderr });
+    process.exit(1);
+  }
+  if (recentImagesPayload.recommendedCall?.tool !== "vision_analyze_attachment") {
+    console.error("Missing recommended attachment analysis call");
+    console.error({ recentImagesPayload, responses, stderr });
     process.exit(1);
   }
   if (!autoRegister?.result?.content?.[0]?.text?.includes("auto_discovered_attachment")) {
@@ -251,9 +327,39 @@ child.on("exit", () => {
     console.error({ responses, stderr });
     process.exit(1);
   }
+  if (!visionStatus?.result?.content?.[0]?.text?.includes("vision_enabled")) {
+    console.error("Missing vision_status enabled response");
+    console.error({ responses, stderr });
+    process.exit(1);
+  }
+  if (!visionDisable?.result?.content?.[0]?.text?.includes("vision_disabled")) {
+    console.error("Missing vision_set_enabled disabled response");
+    console.error({ responses, stderr });
+    process.exit(1);
+  }
+  if (!disabledRecentImages?.result?.content?.[0]?.text?.includes("vision_disabled")) {
+    console.error("Vision tool did not respect disabled switch");
+    console.error({ responses, stderr });
+    process.exit(1);
+  }
+  if (!visionEnable?.result?.content?.[0]?.text?.includes("cannot be re-enabled")) {
+    console.error("vision_set_enabled unexpectedly re-enabled MCP vision from disabled state");
+    console.error({ responses, stderr });
+    process.exit(1);
+  }
+  if (!finalVisionStatus?.result?.content?.[0]?.text?.includes("vision_disabled")) {
+    console.error("Vision switch did not stay disabled after rejected MCP re-enable");
+    console.error({ responses, stderr });
+    process.exit(1);
+  }
   const savedConfig = JSON.parse(fs.readFileSync(configPath, "utf8"));
   if (savedConfig.activeProfile !== "backup-local") {
     console.error("Profile switch was not persisted");
+    console.error({ savedConfig, responses, stderr });
+    process.exit(1);
+  }
+  if (savedConfig.vision?.enabled !== false) {
+    console.error("Vision switch was not kept disabled after rejected MCP re-enable");
     console.error({ savedConfig, responses, stderr });
     process.exit(1);
   }
@@ -262,5 +368,6 @@ child.on("exit", () => {
   console.log("register: ok");
   console.log("attachments: ok");
   console.log("profiles: ok");
+  console.log("vision switch: ok");
   console.log("prompts: ok");
 });

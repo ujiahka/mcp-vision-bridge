@@ -3,7 +3,7 @@ import { prepareImageForVision } from "./image-preprocess.js";
 import { callVisionModel } from "./vision-client.js";
 import { appendAuditLog, providerSummary, summarizeImage } from "./audit-log.js";
 import { listRecentAttachmentImages } from "./attachment-discovery.js";
-import { listProfiles, saveConfig, switchActiveProfile } from "./config.js";
+import { isVisionEnabled, listProfiles, saveConfig, setVisionEnabled, switchActiveProfile } from "./config.js";
 
 const IMAGE_INPUT_PROPERTIES = {
   image_id: { type: "string", description: "Previously registered local image id." },
@@ -15,10 +15,37 @@ const IMAGE_INPUT_PROPERTIES = {
   attachment_hint: { type: "string", description: "Optional free-form hint from the attachment chip. Include all visible chip text/path fragments, e.g. 'image.png 2911x1440 \\temp\\readonly\\mcp_vision...'." },
   attachment_index: { type: "number", description: "Use the Nth newest matching auto-discovered attachment image. Default is 1." },
   auto_discover_attachment: { type: "boolean", description: "Search recent local temp images when no explicit image input is provided. Enabled by default in config." },
+  use_clipboard: { type: "boolean", description: "Windows fallback: read the current local clipboard image if the client did not expose an attachment file. Default is automatic." },
 };
+
+const CONTROL_TOOL_NAMES = new Set([
+  "vision_status",
+  "vision_set_enabled",
+  "vision_list_profiles",
+  "vision_switch_profile",
+]);
 
 export function listTools() {
   return [
+    {
+      name: "vision_status",
+      description: "Show whether mcp-vision-bridge image recognition is enabled. If disabled, use the host model's native multimodal image ability instead of MCP vision tools.",
+      inputSchema: {
+        type: "object",
+        properties: {},
+      },
+    },
+    {
+      name: "vision_set_enabled",
+      description: "Disable mcp-vision-bridge image recognition from inside MCP. This tool may set enabled=false when using a native multimodal host model. It cannot re-enable vision once disabled; the user must run mcp-vision-bridge-vision on from a terminal when switching back to a text-only host model.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          enabled: { type: "boolean", description: "false disables MCP image recognition and lets native multimodal models handle images directly. true is rejected when MCP vision is currently disabled; use mcp-vision-bridge-vision on instead." },
+        },
+        required: ["enabled"],
+      },
+    },
     {
       name: "vision_list_profiles",
       description: "List configured vision provider profiles. Use this before switching plans or models when quota is exhausted.",
@@ -40,7 +67,7 @@ export function listTools() {
     },
     {
       name: "vision_analyze_attachment",
-      description: "One-shot image analysis for uploaded/pasted attachments when the user says common references such as 上图, 参考图, 图1, 图2, screenshot, attached image, or the image above. If the attachment chip shows a filename, dimensions, or path fragment, pass that visible text as attachment_hint. Call this with no image args only when no path or chip text is visible; use attachment_index for 图2/image 2. If the host model can natively inspect the image attachment, answer directly instead of calling this MCP tool.",
+      description: "One-shot image analysis for uploaded/pasted attachments when the user says common references such as 上图, 参考图, 图1, 图2, screenshot, attached image, or the image above. If the attachment chip shows a filename, dimensions, or path fragment, pass that visible text as attachment_hint. It can read Claude Code's local session image blocks, recent temp files, and Windows clipboard fallback. Use attachment_index for 图2/image 2. If the host model can natively inspect the image attachment, answer directly instead of calling this MCP tool. Do not route this through any claude-vision skill.",
       inputSchema: {
         type: "object",
         properties: {
@@ -68,12 +95,13 @@ export function listTools() {
     },
     {
       name: "vision_list_recent_images",
-      description: "List recent local image attachments discovered in temp directories. Use this when the user pasted/uploaded an image but did not provide an absolute path, especially if multiple images may match references like 图1/图2 or attached image.",
+      description: "List recent local image attachments discovered from Claude Code local sessions, temp directories, and Windows clipboard fallback. This tool only lists candidates; it does not analyze image content. Use it when the user pasted/uploaded an image but did not provide an absolute path, especially if multiple images may match references like 图1/图2 or attached image. If the result contains an autoSelectable image, immediately call vision_analyze_attachment or the relevant vision tool with that attachment_index and the user's original image task. Do not use any claude-vision skill.",
       inputSchema: {
         type: "object",
         properties: {
           attachment_name: IMAGE_INPUT_PROPERTIES.attachment_name,
           attachment_hint: IMAGE_INPUT_PROPERTIES.attachment_hint,
+          use_clipboard: IMAGE_INPUT_PROPERTIES.use_clipboard,
           max_results: { type: "number", description: "Maximum candidates to return." },
         },
       },
@@ -170,7 +198,15 @@ export function listTools() {
 }
 
 export async function callTool(name, args, config) {
+  if (!CONTROL_TOOL_NAMES.has(name) && !isVisionEnabled(config)) {
+    return disabledVisionTool(name, config);
+  }
+
   switch (name) {
+    case "vision_status":
+      return statusTool(config);
+    case "vision_set_enabled":
+      return setEnabledTool(args, config);
     case "vision_list_profiles":
       return listProfilesTool(config);
     case "vision_switch_profile":
@@ -198,6 +234,94 @@ export async function callTool(name, args, config) {
     default:
       throw new Error(`Unknown tool: ${name}`);
   }
+}
+
+function statusTool(config) {
+  const envOverride = process.env.VISION_MCP_ENABLED;
+  return JSON.stringify({
+    status: isVisionEnabled(config) ? "vision_enabled" : "vision_disabled",
+    enabled: isVisionEnabled(config),
+    activeProfile: config.activeProfile || "default",
+    provider: providerSummary(config),
+    envOverride: envOverride === undefined ? null : {
+      name: "VISION_MCP_ENABLED",
+      value: envOverride,
+    },
+    commands: {
+      enable: "mcp-vision-bridge-vision on",
+      disable: "mcp-vision-bridge-vision off",
+      status: "mcp-vision-bridge-vision status",
+    },
+    guidance: isVisionEnabled(config)
+      ? "MCP vision is enabled. Use it for text-only host models."
+      : "MCP vision is disabled. Use the host model's native multimodal image ability. Enable it again for text-only host models.",
+  }, null, 2);
+}
+
+function setEnabledTool(args, config) {
+  if (!("enabled" in (args || {}))) throw new Error("enabled is required.");
+
+  const requested = parseEnabled(args.enabled);
+  if (requested && !isVisionEnabled(config)) {
+    return JSON.stringify({
+      status: "vision_disabled",
+      enabled: false,
+      changed: false,
+      requestedEnabled: true,
+      message: "MCP vision is currently disabled and cannot be re-enabled by an MCP tool call. This prevents host models from overriding the user's manual multimodal/text-only switch. Run mcp-vision-bridge-vision on in a terminal to enable MCP vision again.",
+      commands: {
+        enable: "mcp-vision-bridge-vision on",
+        status: "mcp-vision-bridge-vision status",
+      },
+    }, null, 2);
+  }
+
+  const next = setVisionEnabled(config, requested);
+  replaceObject(config, next);
+  const configPath = saveConfig(config);
+
+  appendAuditLog(config, {
+    event: "vision_enabled_switch",
+    success: true,
+    provider: providerSummary(config),
+    result: {
+      enabled: isVisionEnabled(config),
+      configPath,
+    },
+  });
+
+  return JSON.stringify({
+    status: isVisionEnabled(config) ? "vision_enabled" : "vision_disabled",
+    enabled: isVisionEnabled(config),
+    changed: true,
+    configPath,
+    guidance: isVisionEnabled(config)
+      ? "MCP vision is enabled for text-only host models."
+      : "MCP vision is disabled. Use native multimodal image understanding in the host model.",
+  }, null, 2);
+}
+
+function disabledVisionTool(toolName, config) {
+  return JSON.stringify({
+    status: "vision_disabled",
+    enabled: false,
+    tool: toolName,
+    activeProfile: config.activeProfile || "default",
+    provider: providerSummary(config),
+    message: "mcp-vision-bridge image recognition is disabled. Do not use MCP vision for this image; use the host model's native multimodal ability. When switching back to a text-only model, the user must run mcp-vision-bridge-vision on in a terminal.",
+    commands: {
+      enable: "mcp-vision-bridge-vision on",
+      status: "mcp-vision-bridge-vision status",
+    },
+  }, null, 2);
+}
+
+function parseEnabled(value) {
+  if (typeof value === "boolean") return value;
+  const normalized = String(value || "").trim().toLowerCase();
+  if (["1", "true", "yes", "y", "on", "enable", "enabled"].includes(normalized)) return true;
+  if (["0", "false", "no", "n", "off", "disable", "disabled"].includes(normalized)) return false;
+  throw new Error("enabled must be a boolean or one of on/off/true/false.");
 }
 
 function listProfilesTool(config) {
@@ -235,25 +359,61 @@ function switchProfileTool(args, config) {
 async function listRecentImagesTool(args, config) {
   const images = await listRecentAttachmentImages(args, config);
   const maxResults = Math.max(1, Math.min(50, Number(args.max_results || 10)));
+  const returnedImages = images.slice(0, maxResults).map((image, index) => ({
+    attachment_index: index + 1,
+    path: image.path,
+    fileName: image.fileName,
+    mime: image.mime,
+    sourceKind: image.sourceKind,
+    bytes: image.bytes,
+    width: image.width,
+    height: image.height,
+    mtime: image.mtime,
+    ageSeconds: image.ageSeconds,
+    score: image.score,
+    hintMatchScore: image.hintMatchScore,
+    autoSelectable: image.autoSelectable,
+    autoSelectReason: image.autoSelectReason,
+  }));
   return JSON.stringify({
     count: images.length,
     returned: Math.min(images.length, maxResults),
-    images: images.slice(0, maxResults).map((image, index) => ({
-      attachment_index: index + 1,
-      path: image.path,
-      fileName: image.fileName,
-      mime: image.mime,
-      bytes: image.bytes,
-      width: image.width,
-      height: image.height,
-      mtime: image.mtime,
-      ageSeconds: image.ageSeconds,
-      score: image.score,
-      hintMatchScore: image.hintMatchScore,
-      autoSelectable: image.autoSelectable,
-      autoSelectReason: image.autoSelectReason,
-    })),
+    images: returnedImages,
+    ...buildRecentImagesNextStep(returnedImages, args),
   }, null, 2);
+}
+
+function buildRecentImagesNextStep(images, args = {}) {
+  if (!images.length) {
+    return {
+      status: "no_recent_images_found",
+      nextAction: "No recent image candidates were found. If the user just pasted an image on Windows, retry vision_analyze_attachment with use_clipboard=true. Otherwise ask the user for a local path or image URL.",
+    };
+  }
+
+  const selected = images.find((image) => image.autoSelectable) || null;
+  if (!selected) {
+    return {
+      status: "needs_selection",
+      nextAction: "This list result is only attachment discovery, not image analysis. Choose the candidate that matches the user's reference, then call vision_analyze_attachment with attachment_index and the user's original image task. Ask the user only if the candidates cannot be matched.",
+    };
+  }
+
+  const recommendedArguments = {
+    attachment_index: selected.attachment_index,
+    task: "<copy the user's current image-analysis request here>",
+  };
+  if (args.attachment_hint) recommendedArguments.attachment_hint = args.attachment_hint;
+  if (args.attachment_name) recommendedArguments.attachment_name = args.attachment_name;
+
+  return {
+    status: "ready_for_analysis",
+    nextAction: `This list result is only attachment discovery, not image analysis. Immediately call vision_analyze_attachment with attachment_index=${selected.attachment_index} and the user's original image task. Do not use any claude-vision skill.`,
+    recommendedCall: {
+      tool: "vision_analyze_attachment",
+      arguments: recommendedArguments,
+    },
+  };
 }
 
 function replaceObject(target, source) {

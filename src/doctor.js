@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import fs from "node:fs";
 import { attachmentDiscoveryStatus } from "./attachment-discovery.js";
-import { defaultConfigPath, loadConfig } from "./config.js";
+import { defaultConfigPath, isVisionEnabled, loadConfig } from "./config.js";
 import { imagePreprocessStatus } from "./image-preprocess.js";
 import { isRemoteEndpoint } from "./privacy.js";
 
@@ -14,6 +14,10 @@ try {
   const remote = isRemoteEndpoint(config.provider.baseUrl);
   console.log("Config: ok");
   console.log(`Language: ${config.language || "en"}`);
+  console.log(`MCP vision switch: ${isVisionEnabled(config) ? "enabled" : "disabled"}`);
+  if (process.env.VISION_MCP_ENABLED !== undefined) {
+    console.log(`MCP vision switch env override: VISION_MCP_ENABLED=${process.env.VISION_MCP_ENABLED}`);
+  }
   console.log(`Active profile: ${config.activeProfile || "default"}`);
   console.log(`Profiles: ${Object.keys(config.profiles || {}).length || 1}`);
   console.log(`Provider: ${config.provider.name}`);
@@ -43,6 +47,12 @@ try {
   console.log(`Attachment max age minutes: ${attachmentStatus.maxAgeMinutes}`);
   console.log(`Attachment max auto-select age seconds: ${attachmentStatus.maxAutoSelectAgeSeconds}`);
   console.log(`Attachment magic-byte scan: ${attachmentStatus.includeMagicByteScan ? "enabled" : "disabled"}`);
+  console.log(`Attachment Claude Code session fallback: ${attachmentStatus.claudeCodeFallback ? "enabled" : "disabled"}`);
+  console.log(`Attachment clipboard fallback: ${attachmentStatus.clipboardFallback ? "enabled" : "disabled"}`);
+  console.log(`Attachment Claude Code session files: ${attachmentStatus.maxClaudeCodeSessionFiles}`);
+  console.log(`Attachment Claude Code lines per file: ${attachmentStatus.maxClaudeCodeLinesPerFile}`);
+  console.log(`Attachment Claude Code image candidates: ${attachmentStatus.maxClaudeCodeImages}`);
+  console.log(`Attachment Claude Code auto-select age seconds: ${attachmentStatus.maxClaudeCodeAutoSelectAgeSeconds}`);
   console.log(`Attachment search dirs: ${attachmentStatus.searchDirs.join("; ")}`);
 } catch (err) {
   console.error(`Config: failed - ${err.message}`);

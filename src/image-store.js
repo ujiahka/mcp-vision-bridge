@@ -44,11 +44,14 @@ export async function readImageInput(input, config, options = {}) {
       matched_path: attachment.path,
       matched_file_name: attachment.fileName,
       matched_mime: attachment.mime,
+      matched_source_kind: attachment.sourceKind,
       matched_width: attachment.width,
       matched_height: attachment.height,
       matched_score: attachment.score,
       matched_age_seconds: attachment.ageSeconds,
       matched_auto_select_reason: attachment.autoSelectReason,
+      matched_claude_code_session: attachment.claudeCodeSessionPath,
+      matched_claude_code_message_uuid: attachment.claudeCodeMessageUuid,
     });
   }
   throw new Error("No current local attachment image was found. Provide image_path/image_url/image_base64, or paste/upload the image again and call attachment auto-discovery within the fresh-image window.");

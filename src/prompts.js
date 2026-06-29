@@ -11,6 +11,8 @@ Use this rule when the active chat model is text-only and image understanding mu
 
 Do not ask the user to call the vision MCP server. Do not ask for an image path unless automatic discovery fails. Whenever the conversation contains an image-related input or task, call the vision-bridge MCP tools first, then answer normally from the vision result.
 
+If the current host model can natively see uploaded image attachments, disable this bridge with mcp-vision-bridge-vision off or vision_set_enabled enabled=false, then use the host model's native multimodal ability. If any MCP vision tool returns status: "vision_disabled", stop calling MCP vision tools for that image. Do not call vision_set_enabled enabled=true; only the user should re-enable MCP vision by running mcp-vision-bridge-vision on in a terminal.
+
 Use vision_analyze_attachment for uploaded or pasted attachments with no visible path.
 Use vision_analyze_screenshot immediately after Playwright, webapp-testing, browser automation, IDE automation, or terminal capture saves a screenshot.
 Use vision_ocr_image for OCR, vision_image_to_markdown for document/table/chart/page screenshots, vision_ask_image for specific questions, and vision_register_image for repeated multi-turn image analysis.

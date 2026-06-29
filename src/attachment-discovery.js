@@ -1,6 +1,8 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { listClaudeCodeImageCandidates } from "./claude-code-images.js";
+import { getClipboardImageCandidate } from "./clipboard-image.js";
 
 const IMAGE_EXTS = new Set([".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp"]);
 const IMAGE_MAGIC_BYTES = [
@@ -39,10 +41,15 @@ export async function listRecentAttachmentImages(input = {}, config) {
       includeMagicByteScan: settings.includeMagicByteScan && root.includeMagicByteScan,
     });
   }
+  found.push(...listClaudeCodeImageCandidates(config, settings, hint));
 
   const top = found
     .sort((a, b) => b.mtimeMs - a.mtimeMs)
     .slice(0, settings.maxCandidates);
+  if (shouldTryClipboardFallback(input, hint, found, settings)) {
+    const clipboard = getClipboardImageCandidate(config);
+    if (clipboard) top.unshift(clipboard);
+  }
   const enriched = await enrichCandidates(top);
   return enriched
     .map((candidate) => scoreCandidate(candidate, hint, settings))
@@ -70,6 +77,14 @@ function attachmentSettings(config) {
     maxDepth: clampNumber(attachments.maxDepth, 0, 10, 5),
     maxCandidates: clampNumber(attachments.maxCandidates, 1, 1000, 200),
     includeMagicByteScan: attachments.includeMagicByteScan !== false,
+    clipboardFallback: attachments.clipboardFallback !== false,
+    claudeCodeFallback: attachments.claudeCodeFallback !== false,
+    claudeCodeDirs: Array.isArray(attachments.claudeCodeDirs) ? attachments.claudeCodeDirs : [],
+    maxClaudeCodeSessionFiles: clampNumber(attachments.maxClaudeCodeSessionFiles, 1, 100, 12),
+    maxClaudeCodeLinesPerFile: clampNumber(attachments.maxClaudeCodeLinesPerFile, 20, 5000, 400),
+    maxClaudeCodeImages: clampNumber(attachments.maxClaudeCodeImages, 1, 100, 20),
+    maxClaudeCodeAutoSelectAgeSeconds: clampNumber(attachments.maxClaudeCodeAutoSelectAgeSeconds, 5, 24 * 60 * 60, 600),
+    maxImageBytes: config.limits?.maxImageBytes || Infinity,
   };
 }
 
@@ -153,6 +168,7 @@ function collectImages(dir, state, depth = 0) {
       path: fullPath,
       fileName: entry.name,
       mime,
+      sourceKind: "filesystem",
       bytes: stat.size,
       mtime: stat.mtime.toISOString(),
       mtimeMs: stat.mtimeMs,
@@ -237,6 +253,7 @@ function buildHint(input) {
     raw: raw.toLowerCase(),
     dimensions,
     tokens,
+    hasSpecificFileToken: tokens.some((token) => IMAGE_EXTS.has(path.extname(token).toLowerCase())),
   };
 }
 
@@ -265,8 +282,8 @@ function scoreCandidate(candidate, hint, settings) {
   const hintMatchScore = scoreHintMatch(candidate, hint);
   const recencyScore = Math.max(0, 10 - Math.round(ageSeconds / 60));
   const autoSelectable = hint.hasHint
-    ? hintMatchScore > 0
-    : ageSeconds <= settings.maxAutoSelectAgeSeconds;
+    ? isHintSelectable(candidate, hint, hintMatchScore, ageSeconds, settings)
+    : candidate.clipboard || ageSeconds <= settings.maxAutoSelectAgeSeconds;
 
   return {
     ...candidate,
@@ -275,9 +292,22 @@ function scoreCandidate(candidate, hint, settings) {
     ageSeconds,
     autoSelectable,
     autoSelectReason: autoSelectable
-      ? (hint.hasHint ? "hint_match" : "fresh_unhinted")
+      ? autoSelectReason(candidate, hint)
       : (hint.hasHint ? "hint_not_matched" : "too_old_unhinted"),
   };
+}
+
+function isHintSelectable(candidate, hint, hintMatchScore, ageSeconds, settings) {
+  if (hintMatchScore <= 0 && !candidate.claudeCodeHintMatched) return false;
+  if (!candidate.claudeCode) return true;
+  if (hint.hasSpecificFileToken && hintMatchScore > 0) return true;
+  return ageSeconds <= settings.maxClaudeCodeAutoSelectAgeSeconds;
+}
+
+function autoSelectReason(candidate, hint) {
+  if (candidate.clipboard) return "clipboard_image";
+  if (candidate.claudeCode) return hint.hasHint ? "claude_code_hint_match" : "claude_code_recent_image";
+  return hint.hasHint ? "hint_match" : "fresh_unhinted";
 }
 
 function scoreHintMatch(candidate, hint) {
@@ -287,12 +317,19 @@ function scoreHintMatch(candidate, hint) {
   const fileName = candidate.fileName.toLowerCase();
   const fullPath = candidate.path.toLowerCase();
   for (const token of hint.tokens) {
-    if (fileName === token) score += 40;
-    else if (fileName.includes(token)) score += 20;
+    if (fileName === token) score += 120;
+    else if (fileName.includes(token)) score += 100;
     else if (fullPath.includes(token)) score += 10;
   }
 
-  if (hint.dimensions && candidate.width && candidate.height) {
+  if (candidate.claudeCode && candidate.claudeCodeHintMatched && score === 0 && !hint.hasSpecificFileToken) {
+    score += 80;
+  }
+  if (candidate.clipboard && score === 0 && /\b(clipboard|paste|pasted|粘贴|剪贴板|参考图|上图|attached|attachment|image)\b/i.test(hint.raw)) {
+    score += 30;
+  }
+
+  if (hint.dimensions && candidate.width && candidate.height && (!hint.hasSpecificFileToken || score > 0)) {
     const [w, h] = hint.dimensions;
     if ((candidate.width === w && candidate.height === h) || (candidate.width === h && candidate.height === w)) {
       score += 100;
@@ -302,9 +339,28 @@ function scoreHintMatch(candidate, hint) {
 }
 
 function parseDimensions(value) {
-  const match = String(value || "").match(/(\d{2,5})\s*[x×]\s*(\d{2,5})/i);
+  const match = String(value || "").match(/(\d{1,5})\s*[x×]\s*(\d{1,5})/i);
   if (!match) return null;
   return [Number(match[1]), Number(match[2])];
+}
+
+function shouldTryClipboardFallback(input, hint, found, settings) {
+  if (!settings.clipboardFallback) return false;
+  if (input.use_clipboard === false) return false;
+  if (input.use_clipboard === true) return true;
+  if (found.length === 0) return true;
+  if (hintLooksLikePastedAttachment(hint)) return true;
+
+  const freshCutoff = Date.now() - settings.maxAutoSelectAgeSeconds * 1000;
+  return !found.some((candidate) => candidate.mtimeMs >= freshCutoff);
+}
+
+function hintLooksLikePastedAttachment(hint) {
+  const raw = hint?.raw || "";
+  if (!raw) return false;
+  const cjkTriggers = ["粘贴", "剪贴板", "参考图", "上图", "图1", "图2", "图片", "附件", "截图"];
+  if (cjkTriggers.some((token) => raw.includes(token))) return true;
+  return /\b(clipboard|paste|pasted|attached|attachment|image|screenshot|picture|photo)\b/i.test(raw);
 }
 
 async function loadSharp() {

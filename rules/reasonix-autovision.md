@@ -105,6 +105,8 @@ unknown variant image_url, expected text
 
 In that situation, route the image through `mcp-vision-bridge` instead, using attachment discovery, clipboard fallback, a local path, or an image URL.
 
+Also make sure text-only host models are not listed in Reasonix provider `vision_models`. For example, do not mark DeepSeek, GLM text-only, Kimi text-only, or other non-vision coding models as `vision_models`; otherwise Reasonix may send uploaded images directly to the host model before MCP tools can run. Keep `vision_models` only for models that natively accept image input, such as a confirmed vision-capable MiMo/Qwen/GLM-VL endpoint.
+
 ## Multimodal Host Models
 
 If the active Reasonix model can natively see uploaded images, disable MCP vision before the image task:

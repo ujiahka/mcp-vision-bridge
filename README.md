@@ -317,6 +317,8 @@ command = "C:\\Users\\YOUR_NAME\\AppData\\Roaming\\npm\\mcp-vision-bridge.cmd"
 rules/reasonix-autovision.md
 ```
 
+注意：Reasonix 的 `vision_models` 只应填写真正原生支持图片输入的宿主模型。不要把 DeepSeek、GLM 文本模型、Kimi 文本模型等单模态模型写进 `vision_models`，否则 Reasonix 会在 MCP 工具有机会执行之前，把图片块直接发给主模型并触发 400。
+
 ## 9. 终端管理页
 
 安装后可以直接运行：
@@ -644,9 +646,10 @@ unknown variant image_url, expected text
 
 1. 确认 Reasonix 的 `%APPDATA%\reasonix\config.toml` 使用 `[[plugins]]` 注册了 `vision-bridge`。
 2. 把 `vision_analyze_attachment`、`vision_analyze_screenshot`、`vision_describe_image`、`vision_ask_image`、`vision_ocr_image`、`vision_image_to_markdown` 加入 `trusted_read_only_tools`。
-3. 在 Reasonix 全局规则或项目规则中加入 `rules/reasonix-autovision.md` 的自动识图指令。
-4. 对单模态模型，尽量让模型先调用 `mcp__vision-bridge__vision_analyze_attachment`，不要把图片块直接发送给主模型。
-5. 如果客户端仍先把附件发给文本模型，请改用剪贴板、本地绝对路径或图片 URL 触发 MCP 识图。
+3. 检查当前主模型 provider 是否错误配置了 `vision_models`。如果 DeepSeek、GLM 文本模型、Kimi 文本模型等单模态模型出现在 `vision_models` 中，请删除该项或移除对应模型。
+4. 在 Reasonix 全局规则或项目规则中加入 `rules/reasonix-autovision.md` 的自动识图指令。
+5. 对单模态模型，尽量让模型先调用 `mcp__vision-bridge__vision_analyze_attachment`，不要把图片块直接发送给主模型。
+6. 如果客户端仍先把附件发给文本模型，请改用剪贴板、本地绝对路径或图片 URL 触发 MCP 识图。
 
 ### 16.4 一直转圈，进度不变
 
@@ -1140,6 +1143,8 @@ The Reasonix-specific automatic routing rule is:
 rules/reasonix-autovision.md
 ```
 
+Important: Reasonix `vision_models` should contain only host models that natively accept image input. Do not list DeepSeek, text-only GLM, text-only Kimi, or other single-modal coding models there; otherwise Reasonix may send image blocks directly to the host model before MCP tools can run and trigger HTTP 400.
+
 ## 9. Terminal Management Console
 
 Run:
@@ -1353,9 +1358,10 @@ the client likely sent image blocks directly to a text-only host model instead o
 
 1. Confirm `%APPDATA%\reasonix\config.toml` registers `vision-bridge` with `[[plugins]]`.
 2. Add `vision_analyze_attachment`, `vision_analyze_screenshot`, `vision_describe_image`, `vision_ask_image`, `vision_ocr_image`, and `vision_image_to_markdown` to `trusted_read_only_tools`.
-3. Add the routing rule from `rules/reasonix-autovision.md` to Reasonix global or project instructions.
-4. For text-only models, route image requests through `mcp__vision-bridge__vision_analyze_attachment` before answering.
-5. If the client still sends attachments directly to the text-only model first, use clipboard fallback, an explicit local path, or an image URL for MCP vision.
+3. Check whether the active host provider incorrectly lists text-only models in `vision_models`. Remove DeepSeek, text-only GLM, text-only Kimi, and other single-modal models from that field.
+4. Add the routing rule from `rules/reasonix-autovision.md` to Reasonix global or project instructions.
+5. For text-only models, route image requests through `mcp__vision-bridge__vision_analyze_attachment` before answering.
+6. If the client still sends attachments directly to the text-only model first, use clipboard fallback, an explicit local path, or an image URL for MCP vision.
 
 ### 15.3 Request Hangs Or Progress Does Not Move
 

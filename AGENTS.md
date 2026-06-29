@@ -18,7 +18,7 @@ Preferred tools:
 - `vision_list_recent_images`
 - `vision_register_image`
 
-Do not use a `claude-vision` skill or a `vision.js` script for image recognition in this project. The `claude-vision-mcp` name is only a compatibility command alias for the MCP server, not a skill workflow.
+Use `mcp-vision-bridge` directly for image recognition in this project. The `claude-vision-mcp` name is only a compatibility command alias for the MCP server.
 
 If `vision_status` or any vision tool returns `status: "vision_disabled"`, stop calling MCP vision tools for that image and use native multimodal image understanding if the host model supports it. Do not try to re-enable MCP vision from inside the conversation.
 

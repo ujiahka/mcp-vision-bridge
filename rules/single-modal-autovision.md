@@ -6,7 +6,7 @@ Use this rule when the active chat model is text-only and image understanding mu
 
 Do not ask the user to call the vision MCP server. Do not ask for an image path unless automatic discovery fails. Whenever the conversation contains an image-related input or task, call the `vision-bridge` MCP tools first, then answer normally from the vision result.
 
-Do not use a `claude-vision` skill, `vision.js` script, or other legacy skill workflow for image recognition. `claude-vision-mcp` is only a compatibility command alias for this MCP server.
+Use `mcp-vision-bridge` directly for image recognition. `claude-vision-mcp` is only a compatibility command alias for this MCP server.
 
 If the current host model can natively see uploaded image attachments, disable this bridge with `mcp-vision-bridge-vision off` or `vision_set_enabled` with `enabled: false`, then answer from the host model's native multimodal ability. Do not call `vision_set_enabled` with `enabled: true`. Only the user should re-enable MCP vision by running `mcp-vision-bridge-vision on` in a terminal when switching back to a text-only host model.
 

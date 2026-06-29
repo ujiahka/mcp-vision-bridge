@@ -31,8 +31,6 @@
 管理面板:    mvb
 ```
 
-注意：`claude-vision-mcp` 只是兼容命令别名，不是旧的 `claude-vision` skill 工作流。
-
 ## 2. 核心特性
 
 - 支持 OpenAI-compatible 和 Anthropic-compatible 两种接口格式。
@@ -780,6 +778,10 @@ Linux 默认位置：
 
 删除配置会移除 API Key、日志、缓存和已注册图片。执行前请确认不再需要这些数据。
 
+## 18. 开源协议
+
+本项目使用 MIT License。详见 [LICENSE](LICENSE)。
+
 ---
 
 # English Documentation
@@ -801,8 +803,6 @@ Primary command:       mcp-vision-bridge
 Compatibility alias:   claude-vision-mcp
 Management console:    mvb
 ```
-
-`claude-vision-mcp` is only a compatibility command alias for this MCP server. It is not the legacy `claude-vision` skill workflow.
 
 ## 2. Features
 
@@ -1359,3 +1359,7 @@ Linux:
 ```
 
 Removing this directory deletes local API keys, logs, cache, and registered images. Do this only when you no longer need them.
+
+## 17. License
+
+This project is licensed under the MIT License. See [LICENSE](LICENSE).

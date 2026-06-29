@@ -67,7 +67,7 @@ export function listTools() {
     },
     {
       name: "vision_analyze_attachment",
-      description: "One-shot image analysis for uploaded/pasted attachments when the user says common references such as 上图, 参考图, 图1, 图2, screenshot, attached image, or the image above. If the attachment chip shows a filename, dimensions, or path fragment, pass that visible text as attachment_hint. It can read Claude Code's local session image blocks, recent temp files, and Windows clipboard fallback. Use attachment_index for 图2/image 2. If the host model can natively inspect the image attachment, answer directly instead of calling this MCP tool. Do not route this through any claude-vision skill.",
+      description: "One-shot image analysis for uploaded/pasted attachments when the user says common references such as 上图, 参考图, 图1, 图2, screenshot, attached image, or the image above. If the attachment chip shows a filename, dimensions, or path fragment, pass that visible text as attachment_hint. It can read Claude Code's local session image blocks, recent temp files, and Windows clipboard fallback. Use attachment_index for 图2/image 2. If the host model can natively inspect the image attachment, answer directly instead of calling this MCP tool.",
       inputSchema: {
         type: "object",
         properties: {
@@ -95,7 +95,7 @@ export function listTools() {
     },
     {
       name: "vision_list_recent_images",
-      description: "List recent local image attachments discovered from Claude Code local sessions, temp directories, and Windows clipboard fallback. This tool only lists candidates; it does not analyze image content. Use it when the user pasted/uploaded an image but did not provide an absolute path, especially if multiple images may match references like 图1/图2 or attached image. If the result contains an autoSelectable image, immediately call vision_analyze_attachment or the relevant vision tool with that attachment_index and the user's original image task. Do not use any claude-vision skill.",
+      description: "List recent local image attachments discovered from Claude Code local sessions, temp directories, and Windows clipboard fallback. This tool only lists candidates; it does not analyze image content. Use it when the user pasted/uploaded an image but did not provide an absolute path, especially if multiple images may match references like 图1/图2 or attached image. If the result contains an autoSelectable image, immediately call vision_analyze_attachment or the relevant vision tool with that attachment_index and the user's original image task.",
       inputSchema: {
         type: "object",
         properties: {
@@ -408,7 +408,7 @@ function buildRecentImagesNextStep(images, args = {}) {
 
   return {
     status: "ready_for_analysis",
-    nextAction: `This list result is only attachment discovery, not image analysis. Immediately call vision_analyze_attachment with attachment_index=${selected.attachment_index} and the user's original image task. Do not use any claude-vision skill.`,
+    nextAction: `This list result is only attachment discovery, not image analysis. Immediately call vision_analyze_attachment with attachment_index=${selected.attachment_index} and the user's original image task.`,
     recommendedCall: {
       tool: "vision_analyze_attachment",
       arguments: recommendedArguments,
